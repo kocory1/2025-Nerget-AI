@@ -1,2 +1,6 @@
 yolo11n-cls.pt
 yolov8n.pt
+
+datasets/
+ClothingParts_v1i_yolov11/
+
