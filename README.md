@@ -6,15 +6,15 @@
 - **0.8+ 신뢰도** 기반 정확한 객체 인식
 - **실시간 처리** 및 배치 분석 지원
 
-### 🎨 고급 색상 분석
+### 🎯 3가지 스타일 분류기
+- **🌈 Colorful**: 색상의 화려함과 생동감 분석
+- **🔥 Maximal**: 맥시멀/미니멀 성향 분석 (개발 예정)
+- **👔 Formal**: 포멀/캐주얼 격식성 분석 (개발 예정)
+
+### 🎨 고급 색상 분석 (Colorful)
 - **HSV 색상 공간** 기반 정밀 분석
 - **DBSCAN 클러스터링**으로 노이즈 제거 및 대표 색상 추출
 - **Trimmed Mean** 알고리즘으로 robust한 색상 값 계산
-
-### 📊 스타일 인텔리전스
-- **Basic** (-1.0 ~ -0.3): 미니멀하고 차분한 스타일
-- **Neutral** (-0.3 ~ 0.3): 균형 잡힌 중간 톤 스타일  
-- **Showy** (0.3 ~ 1.0): 화려하고 역동적인 스타일
 
 ### 🏗️ 엔터프라이즈 아키텍처
 - **마이크로서비스** 구조로 개별 모듈 독립 배포 가능
@@ -27,18 +27,32 @@
 ```
 2025-Nerget-AI/
 ├── 🧠 src/                          # 핵심 AI 모듈
-│   ├── 🤖 models/                   # AI 모델 & 파이프라인
-│   │   ├── detection_pipeline.py    # 🎯 메인 감지 파이프라인
-│   │   ├── color_analyzer.py        # 🎨 색상 분석 엔진
-│   │   └── yolos_detector.py        # 🔍 YOLO 객체 감지기
+│   ├── 🚀 pipelines/                # 분석 파이프라인
+│   │   ├── colorful_pipeline.py     # 🌈 Colorful 분석 파이프라인
+│   │   ├── maximal_pipeline.py      # 🔥 Maximal 분석 파이프라인 (TODO)
+│   │   ├── formal_pipeline.py       # 👔 Formal 분석 파이프라인 (TODO)
+│   │   ├── unified_pipeline.py      # 🎯 통합 분석 파이프라인
+│   │   └── base_pipeline.py         # 📋 파이프라인 베이스 클래스
+│   ├── 🔬 analyzers/                # 분석기 모듈
+│   │   └── colorful_analyzer.py     # 🌈 색상 화려함 분석기
+│   ├── 🤖 detectors/                # 객체 감지 모듈
+│   │   └── object_detector.py       # 🔍 YOLO 객체 감지기
+│   ├── ⚡ processors/               # 결과 처리 모듈
+│   │   └── result_processor.py      # 📊 분석 결과 처리기
+│   ├── 🖼️ visualizers/              # 시각화 모듈
+│   │   └── image_visualizer.py      # 📈 이미지 시각화기
 │   ├── ⚙️ core/                     # 핵심 알고리즘
 │   │   ├── color_processing.py      # 🌈 색상 처리 & 클러스터링
 │   │   └── clustering.py            # 📊 클러스터링 알고리즘
-│   ├── 🛠️ utils/                    # 유틸리티 & 시각화
-│   │   └── visualization.py         # 📈 결과 시각화 엔진
+│   ├── 🛠️ utils/                    # 유틸리티
+│   │   └── visualization.py         # 📈 시각화 유틸리티
 │   ├── ⚙️ config/                   # 시스템 설정
 │   │   ├── settings.py              # 🔧 글로벌 설정
 │   │   └── labels.py               # 🏷️ 카테고리 라벨
+│   ├── 🤖 models/                   # 기존 모델 (호환성)
+│   │   ├── detection_pipeline.py    # (deprecated)
+│   │   ├── color_analyzer.py        # (deprecated)  
+│   │   └── yolos_detector.py        # 🔍 YOLO 모델 래퍼
 │   └── 🌐 api/                      # REST API 서버
 │       └── main.py                 # 🚀 FastAPI 애플리케이션
 ├── 📊 scripts/                      # 실행 스크립트
@@ -46,14 +60,13 @@
 │   ├── check_yolo_labels.py        # ✅ 라벨 검증
 │   └── classfi_color.py           # 🎨 색상 분류
 ├── 🧪 tests/                        # 테스트 스위트
-│   └── test_runner.py              # 🏃 테스트 러너
+│   └── test_yolo_color_simple_modular.py  # 🌈 Colorful 파이프라인 테스트
 ├── 📚 docs/                         # 기술 문서
 │   ├── project_structure.md        # 📋 프로젝트 구조
 │   └── *.ipynb                    # 📓 분석 노트북
-├── 🗃️ dataset/                      # 학습/검증 데이터
-│   ├── minimal/ (100장)           # 🎯 기본 테스트 세트
-│   └── maximal/ (100장)           # 🚀 확장 검증 세트
-└── 🎯 test_yolo_color_simple.py    # 메인 실행 파일
+└── 🗃️ dataset/                      # 분류기 개발용 샘플 데이터
+    ├── minimal/ (100장)           # 🎯 기본 테스트 세트 (Colorful)
+    └── maximal/ (100장)           # 🚀 확장 검증 세트 (Maximal)
 ```
 
 ## 🚀 빠른 시작
@@ -71,14 +84,14 @@ pip install -r requirements.txt
 ### 2️⃣ 기본 실행
 
 ```bash
-# 🎯 메인 테스트 실행 (권장)
-python test_yolo_color_simple.py
+# 🌈 Colorful 파이프라인 테스트 (권장)
+python tests/test_yolo_color_simple_modular.py
 
-# ⚡ 빠른 테스트
-python scripts/quick_test.py
+# ✅ YOLO 라벨 검증
+python scripts/check_yolo_labels.py
 
-# 🔍 종합 테스트 (의존성 체크 포함)
-python tests/test_runner.py
+# 🎯 통합 분석 테스트 (추후 지원)
+# python tests/test_unified_pipeline.py
 ```
 
 ### 3️⃣ API 서버 시작
@@ -96,23 +109,30 @@ uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
 ### 기본 사용법
 
 ```python
-from src.models.detection_pipeline import DetectionPipeline
+# 🌈 개별 분류기 사용
+from src.pipelines.colorful_pipeline import ColorfulPipeline
 
-# 🚀 파이프라인 초기화
-pipeline = DetectionPipeline()
+pipeline = ColorfulPipeline()
+result = pipeline.detect_and_analyze("image.jpg", conf_threshold=0.8)
 
-# 🔍 이미지 분석 실행
-result = pipeline.detect_and_analyze(
-    image_path="path/to/image.jpg", 
-    conf_threshold=0.8
-)
-
-# 📊 결과 확인
 if result.get("success"):
     print(f"감지된 객체: {len(result['detections'])}개")
-    
-    # 🎨 시각화
     pipeline.visualize_results(result)
+```
+
+```python
+# 🎯 통합 분석 사용 (3가지 분류기)
+from src.pipelines.unified_pipeline import UnifiedPipeline
+
+unified = UnifiedPipeline()
+result = unified.detect_and_analyze("image.jpg", conf_threshold=0.8)
+
+if result.get("success"):
+    for detection in result["detections"]:
+        scores = detection["scores"]
+        print(f"Colorful: {scores['colorful_score']:.3f}")
+        print(f"Maximal: {scores['maximal_score']:.3f}")  # TODO
+        print(f"Formal: {scores['formal_score']:.3f}")    # TODO
 ```
 
 ### 고급 모듈 사용
@@ -133,10 +153,10 @@ print(f"📊 스타일 분류: {color_result['style_classification']}")
 
 ```python
 # 🔍 YOLO 감지만 사용
-from src.models.yolos_detector import YOLOSDetector
+from src.detectors.object_detector import ObjectDetector
 
-detector = YOLOSDetector()
-detections = detector.detect(image_path, confidence_threshold=0.8)
+detector = ObjectDetector()
+detections = detector.detect_objects(image_path, conf_threshold=0.8)
 
 for detection in detections:
     print(f"🏷️ {detection['label']}: {detection['confidence']:.3f}")
@@ -144,14 +164,10 @@ for detection in detections:
 
 ```python
 # 📈 시각화만 사용
-from src.utils.visualization import visualize_detection_results
+from src.visualizers.image_visualizer import ImageVisualizer
 
-visualized_image = visualize_detection_results(
-    image_rgb, 
-    detection_results,
-    show_confidence=True,
-    show_style_classification=True
-)
+visualizer = ImageVisualizer()
+visualizer.visualize_analysis_results(analysis_result, verbose=True)
 ```
 
 ## 🔬 핵심 알고리즘
@@ -181,71 +197,108 @@ trimmed_mean = trim_mean(cluster_values, proportiontocut=0.2)
 saturation_score = (trimmed_mean / 255.0) * 2 - 1
 ```
 
-### 📊 스타일 분류 로직
-```python
-def classify_style(saturation_score):
-    if saturation_score <= -0.3:
-        return "Basic"     # 미니멀, 차분함
-    elif saturation_score <= 0.3:
-        return "Neutral"   # 균형감, 안정감
-    else:
-        return "Showy"     # 화려함, 역동성
-```
 
 ## 📊 분석 결과 해석
 
-### 출력 예시
+### Colorful 파이프라인 출력 예시
 ```
-🎯 Nerget AI 패션 분석 결과
+🌈 Colorful 파이프라인 테스트 (YOLO + DBSCAN 색상 분석)
+======================================================================
+1. YOLOS 분석기 초기화 중... (Fashionpedia 모델)
+✅ YOLOS 분석기 초기화 완료
+📸 테스트 이미지: test_image.jpg
 
-📷 이미지: test_image.jpg
-🔍 총 감지 객체: 2개
+🔍 YOLO 객체 감지 중...
+✅ 감지된 객체: 3개
+
+🎨 각 영역별 색상 분석 중...
 
 📊 영역 1 분석:
-  🏷️ 클래스: dress (ID: 10)
-  🎯 신뢰도: 0.878
-  📍 위치: [120, 45, 340, 580]
-  🎨 색상 분석:
-    └─ 발견된 클러스터: 2개
-    └─ 선택된 클러스터: 1 (크기: 30,980픽셀)
-    └─ 절삭평균 채도: 26.6/255
-    └─ 채도 점수: -0.791
-  📊 스타일 분류: Basic ✨
+  클래스: bag, wallet (ID: 24)
+  신뢰도: 0.988
+  🎯 발견된 클러스터: 1개
+  📊 노이즈 픽셀: 24,913개 (93.0%)
+  🎯 절삭평균 채도: 255.0
+  📊 채도 점수: 1.000 (Showy)
 
 📊 영역 2 분석:
-  🏷️ 클래스: bag (ID: 27)
-  🎯 신뢰도: 0.923
-  📍 위치: [450, 200, 520, 350]
-  🎨 색상 분석:
-    └─ 발견된 클러스터: 1개
-    └─ 선택된 클러스터: 0 (크기: 8,450픽셀)
-    └─ 절삭평균 채도: 180.3/255
-    └─ 채도 점수: 0.415
-  📊 스타일 분류: Showy 🌟
+  클래스: dress (ID: 10)
+  신뢰도: 0.802
+  🎯 절삭평균 채도: 24.1
+  📊 채도 점수: -0.811 (Basic)
 
-💫 전체 분석 완료! 시각화 결과를 확인하세요.
+📋 전체 분석 결과 요약:
+분석된 영역 수: 3
+전체 평균 점수: -0.209
+
+🖼️ 결과 시각화...
+✅ 시각화 완료
+🎉 Colorful 파이프라인 테스트 완료!
+```
+
+### 통합 파이프라인 출력 예시 (예정)
+```json
+{
+  "success": true,
+  "pipeline_type": "unified",
+  "detections": [
+    {
+      "region_id": 0,
+      "class_name": "dress",
+      "scores": {
+        "colorful_score": -0.811,
+        "maximal_score": 0.0,    // TODO
+        "formal_score": 0.0      // TODO
+      }
+    }
+  ],
+  "overall_scores": {
+    "colorful_score": -0.209,
+    "maximal_score": 0.0,
+    "formal_score": 0.0
+  }
+}
 ```
 
 ## 🛠️ 개발자 가이드
 
-### 새로운 분석 모듈 추가
+### 새로운 분류기 추가 (예: Shape 분류기)
 
-1. **색상 분석 알고리즘 확장**
+1. **새 분석기 생성**
 ```python
-# src/core/color_processing.py에 새 함수 추가
-def analyze_texture_patterns(image_region, bbox):
-    """텍스처 패턴 분석 함수"""
-    # 새로운 분석 로직 구현
-    return texture_result
+# src/analyzers/shape_analyzer.py
+from .base_analyzer import BaseAnalyzer
+
+class ShapeAnalyzer(BaseAnalyzer):
+    def analyze_detections(self, image_path, detections):
+        # Shape 분석 로직 구현
+        return shape_results
 ```
 
-2. **파이프라인에 통합**
+2. **새 파이프라인 생성**
 ```python
-# src/models/detection_pipeline.py 수정
-def detect_and_analyze(self, image_path, **kwargs):
-    # 기존 분석 + 새로운 분석 추가
-    texture_result = analyze_texture_patterns(region, bbox)
-    result['texture_analysis'] = texture_result
+# src/pipelines/shape_pipeline.py
+from .base_pipeline import BasePipeline
+from ..analyzers.shape_analyzer import ShapeAnalyzer
+
+class ShapePipeline(BasePipeline):
+    def __init__(self):
+        self.analyzer = ShapeAnalyzer()
+    
+    def detect_and_analyze(self, image_path, **kwargs):
+        # Shape 분석 로직
+        return shape_result
+```
+
+3. **통합 파이프라인에 추가**
+```python
+# src/pipelines/unified_pipeline.py 수정
+from .shape_pipeline import ShapePipeline
+
+class UnifiedPipeline:
+    def __init__(self):
+        self.shape_pipeline = ShapePipeline()  # 추가
+        # 기존 파이프라인들...
 ```
 
 ### 설정 커스터마이징
@@ -340,51 +393,6 @@ async def analyze_batch_images(files: List[UploadFile]):
 
 전체 의존성은 `requirements.txt` 참조.
 
-## 🚀 로드맵
-
-### v3.0 (2024 Q2)
-- [ ] 🐳 Docker 컨테이너 지원
-- [ ] ☁️ 클라우드 배포 가이드 (AWS, GCP)
-- [ ] 📱 모바일 앱 API 지원
-- [ ] 🔄 실시간 스트리밍 분석
-
-### v3.1 (2024 Q3)
-- [ ] 🧠 추가 AI 모델 통합 (세그멘테이션)
-- [ ] 🎨 고급 색상 분석 (색조, 명도 포함)
-- [ ] 📊 사용자 맞춤 스타일 분류
-- [ ] 🔍 텍스처 및 패턴 분석
-
-### v4.0 (2024 Q4)
-- [ ] 🌐 프론트엔드 웹 인터페이스
-- [ ] 📈 실시간 대시보드
-- [ ] 🤖 ChatGPT 연동 패션 조언
-- [ ] 🛒 전자상거래 플랫폼 연동
-
-## 🤝 기여하기
-
-### 개발 참여
-1. **이슈 리포팅**: 버그 발견 시 상세한 재현 단계와 함께 이슈 생성
-2. **기능 제안**: 새로운 기능 아이디어를 이슈로 제안
-3. **코드 기여**: 
-   ```bash
-   git checkout -b feature/새기능명
-   # 개발 작업
-   git commit -am "feat: 새기능 추가"
-   git push origin feature/새기능명
-   # Pull Request 생성
-   ```
-
-### 개발 가이드라인
-- **코드 스타일**: PEP 8 준수
-- **테스트**: 새 기능은 반드시 테스트 코드 포함
-- **문서화**: docstring 및 README 업데이트
-- **성능**: 기존 성능 저하 없이 개선
-
-## 📞 지원 및 문의
-
-- **기술 문의**: GitHub Issues 
-- **버그 리포트**: GitHub Issues (bug 라벨)
-- **기능 요청**: GitHub Issues (enhancement 라벨)
 
 ## 📄 라이센스
 
@@ -394,12 +402,18 @@ async def analyze_batch_images(files: List[UploadFile]):
 
 ## 🆕 버전 히스토리
 
-### v2.0 (Current) - 모듈화 완성
+### v3.0 (Current) - 3가지 분류기 구조 완성
+- ✅ **3가지 분류기 아키텍처**: Colorful, Maximal, Formal 분류기 설계
+- ✅ **모듈화 리팩토링**: 파이프라인별 독립적 구조로 분리
+- ✅ **통합 파이프라인**: UnifiedPipeline으로 3가지 분석 통합
+- ✅ **Colorful 파이프라인**: 색상 화려함 분석 완전 구현
+- ✅ **확장 가능한 설계**: 새로운 분류기 쉽게 추가 가능
+- ✅ **테스트 구조 정리**: tests/ 디렉토리로 테스트 파일 이동
+
+### v2.0 - 모듈화 완성
 - ✅ **완전 모듈화**: 모든 기능을 재사용 가능한 모듈로 분리
 - ✅ **통합 파이프라인**: DetectionPipeline 클래스로 원스톱 분석
-- ✅ **코드 최적화**: 283줄 → 41줄로 메인 실행 파일 간소화
 - ✅ **API 서버**: FastAPI 기반 RESTful API 제공
-- ✅ **확장성 향상**: 플러그인 방식으로 새 기능 추가 용이
 
 ### v1.0 - 초기 프로토타입
 - ✅ YOLO 객체 감지 기본 구현
@@ -407,5 +421,3 @@ async def analyze_batch_images(files: List[UploadFile]):
 - ✅ 기본 시각화 기능
 
 ---
-
-*🎨 **Nerget AI**와 함께 패션의 미래를 만들어가세요!*

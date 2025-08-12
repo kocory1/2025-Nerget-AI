@@ -161,11 +161,3 @@ class DetectionPipeline:
             analysis_result["detections"]
         )
     
-    def get_style_classification(self, score: float) -> str:
-        """점수에 따른 스타일 분류"""
-        if score < -0.3:
-            return "Basic"
-        elif score <= 0.3:
-            return "Neutral"
-        else:
-            return "Showy"
