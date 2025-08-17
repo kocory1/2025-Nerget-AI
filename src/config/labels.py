@@ -161,3 +161,48 @@ def get_formality_label(score: int) -> str:
     if score < 0:
         return "Casual"
     return "Neutral"
+
+
+# =========================
+# Minimal / Maximal 판단을 위한 핵심 아이템 정의
+# =========================
+
+# 핵심 아이템: 의상 본체/주요 액세서리. 구조적 요소(27~45)는 제외
+# Fashionpedia 기준으로 0~26 범주를 핵심으로 간주
+CORE_ITEM_IDS = set([i for i in range(0, 27)])
+
+
+def is_core_item(class_id: int) -> bool:
+    """핵심 아이템 여부 반환"""
+    return int(class_id) in CORE_ITEM_IDS
+
+
+def classify_style_by_core_count(label_id_list, threshold: int = 5):
+    """
+    감지된 라벨 ID 리스트를 받아 핵심 아이템 개수로 스타일을 분류
+    Args:
+        label_id_list: 감지된 객체들의 클래스 ID 시퀀스
+        threshold: 맥시멀로 판단할 핵심 아이템 개수 임계값
+    Returns:
+        (predicted_style:str, core_item_count:int, core_ratio:float)
+    """
+    core_count = sum(1 for cid in label_id_list if is_core_item(int(cid)))
+    total = max(1, len(label_id_list))
+    core_ratio = float(core_count) / float(total)
+    style = "maximal" if core_count >= int(threshold) else "minimal"
+    return style, core_count, core_ratio
+
+
+def compute_maximal_score(core_item_count: int, threshold: int) -> float:
+    """
+    스무딩된 최대화 점수 계산 (tanh 기반)
+    - threshold에서 0이 되도록 중심을 맞추고, tau로 기울기를 제어
+    - 극단값 포화를 완화해 점수가 급격히 1/-1로 포화되지 않도록 함
+    """
+    import math
+    t = max(1, int(threshold))
+    # 중심화: (count - threshold). tau는 완만함(스무딩) 제어. threshold의 절반을 기본으로.
+    tau = max(1e-6, t / 2.0)
+    x = (float(core_item_count) - float(t)) / float(tau)
+    score = math.tanh(x)  # [-1, 1]
+    return float(score)
