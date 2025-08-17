@@ -45,7 +45,7 @@ class UnifiedPipeline(BasePipeline):
         )
         results["colorful"] = colorful_result
         
-        # 2. Maximal 분석 (TODO)
+        # 2. Maximal 분석 (구현 완료)
         if verbose:
             print("🔥 Maximal 분석 중...")
         maximal_result = self.maximal_pipeline.detect_and_analyze(
@@ -84,7 +84,8 @@ class UnifiedPipeline(BasePipeline):
                 unified_detection = detection.copy()
                 unified_detection["scores"] = {
                     "colorful_score": detection.get("saturation_score", 0.0),
-                    "maximal_score": 0.0,  # TODO: maximal 구현 후 실제 값
+                    # 최대화 점수는 현재 핵심 아이템 여부를 1/0로 단순 부여 (추후 고도화 가능)
+                    "maximal_score": 1.0 if detection.get("is_core_item") else 0.0,
                     "formal_score": None
                 }
                 unified_detections.append(unified_detection)
@@ -103,6 +104,11 @@ class UnifiedPipeline(BasePipeline):
                 else:
                     ud["scores"]["formal_score"] = 0.0
 
+            overall_maximal_score = 0.0
+            if results["maximal"].get("success"):
+                # 이미지 수준 maximal 점수: [-1,1] 범위 점수 사용
+                overall_maximal_score = float(results["maximal"].get("maximal_score", 0.0))
+
             return {
                 "image_path": image_path,
                 "success": True,
@@ -116,7 +122,7 @@ class UnifiedPipeline(BasePipeline):
                 },
                 "overall_scores": {
                     "colorful_score": colorful_result.get("average_score", 0.0),
-                    "maximal_score": 0.0,  # TODO: 구현 후 실제 값
+                    "maximal_score": overall_maximal_score,
                     "formal_score": results["formal"].get("formal_overall_score", 0.0)
                 }
             }

@@ -4,3 +4,4 @@ yolov8n.pt
 datasets/
 ClothingParts_v1i_yolov11/
 
+__pycache__/
