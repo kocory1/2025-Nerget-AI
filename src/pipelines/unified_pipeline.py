@@ -45,7 +45,7 @@ class UnifiedPipeline(BasePipeline):
         )
         results["colorful"] = colorful_result
         
-        # 2. Maximal 분석 (TODO)
+        # 2. Maximal 분석 (구현 완료)
         if verbose:
             print("🔥 Maximal 분석 중...")
         maximal_result = self.maximal_pipeline.detect_and_analyze(
