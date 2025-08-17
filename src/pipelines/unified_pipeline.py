@@ -53,7 +53,7 @@ class UnifiedPipeline(BasePipeline):
         )
         results["maximal"] = maximal_result
         
-        # 3. Formal 분석 (TODO)
+        # 3. Formal 분석 (구현됨: 단순 평균)
         if verbose:
             print("👔 Formal 분석 중...")
         formal_result = self.formal_pipeline.detect_and_analyze(
@@ -85,10 +85,24 @@ class UnifiedPipeline(BasePipeline):
                 unified_detection["scores"] = {
                     "colorful_score": detection.get("saturation_score", 0.0),
                     "maximal_score": 0.0,  # TODO: maximal 구현 후 실제 값
-                    "formal_score": 0.0    # TODO: formal 구현 후 실제 값
+                    "formal_score": None
                 }
                 unified_detections.append(unified_detection)
             
+            # Formal per-detection 매핑 (클래스/박스 매칭 단순화: region_id 기준)
+            formal_map = {}
+            if results["formal"].get("success"):
+                for fr in results["formal"].get("detections", []):
+                    formal_map[fr.get("region_id")] = fr.get("formal_score", 0.0)
+
+            # region_id를 키로 매핑해 scores.formal_score 채우기
+            for ud in unified_detections:
+                rid = ud.get("region_id")
+                if rid in formal_map:
+                    ud["scores"]["formal_score"] = formal_map[rid]
+                else:
+                    ud["scores"]["formal_score"] = 0.0
+
             return {
                 "image_path": image_path,
                 "success": True,
@@ -103,7 +117,7 @@ class UnifiedPipeline(BasePipeline):
                 "overall_scores": {
                     "colorful_score": colorful_result.get("average_score", 0.0),
                     "maximal_score": 0.0,  # TODO: 구현 후 실제 값
-                    "formal_score": 0.0    # TODO: 구현 후 실제 값
+                    "formal_score": results["formal"].get("formal_overall_score", 0.0)
                 }
             }
         else:

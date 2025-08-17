@@ -5,7 +5,7 @@
 
 from typing import Dict, Any
 
-from ..utils.visualization import visualize_detection_results
+from .plotting import visualize_detection_results
 
 
 class ImageVisualizer:

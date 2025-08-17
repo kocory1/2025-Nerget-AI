@@ -163,7 +163,7 @@ def analyze_region_with_clustering(image: np.ndarray, bbox: Tuple[float, float, 
     
     # DBSCAN 클러스터링
     total_pixels = len(saturation_values)
-    min_samples = total_pixels // 20  # 전체 픽셀의 5%
+    min_samples = max(total_pixels // 10, 3000)  # 전체 픽셀의 5%
     
     saturation_data = saturation_values.reshape(-1, 1)
     dbscan = DBSCAN(eps=eps, min_samples=min_samples)
