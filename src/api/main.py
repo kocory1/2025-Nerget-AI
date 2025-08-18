@@ -1,6 +1,5 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 import uvicorn
 import os
 import sys
@@ -13,7 +12,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
 # 최신 파이프라인/감지기 사용
-from src.pipelines.colorful_pipeline import ColorfulPipeline
+from src.pipelines.unified_pipeline import UnifiedPipeline
 
 app = FastAPI(
     title="너겟 AI API",
@@ -30,14 +29,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 최신 Colorful 파이프라인 초기화 (전역)
-pipeline: ColorfulPipeline | None = None
+# 통합 파이프라인 초기화 (전역)
+pipeline: UnifiedPipeline | None = None
 try:
-    pipeline = ColorfulPipeline()
-    print("ColorfulPipeline 초기화 완료")
+    pipeline = UnifiedPipeline()
+    print("UnifiedPipeline 초기화 완료")
 except Exception as e:
     pipeline = None
-    print(f"ColorfulPipeline 초기화 실패: {e}")
+    print(f"UnifiedPipeline 초기화 실패: {e}")
 
 @app.get("/")
 async def root():
@@ -72,7 +71,9 @@ async def analyze_clothing(
     conf_threshold: float = 0.8,
 ):
     """
-    의류 감지 및 색상 분석 엔드포인트 (DBSCAN 기반 ColorfulPipeline)
+    통합 파이프라인 기반 분석 엔드포인트
+    - 반환: 벡터만
+      * vector: [colorful, maximal, formal]
     """
     if pipeline is None or not pipeline.is_ready():
         raise HTTPException(status_code=503, detail="모델이 준비되지 않았습니다.")
@@ -88,11 +89,16 @@ async def analyze_clothing(
             temp_file = tmp.name
 
         result = pipeline.detect_and_analyze(temp_file, conf_threshold=conf_threshold, verbose=False)
+        scores = result.get("image_level_scores", {})
+
+        col = float(scores.get("colorful") or 0.0)
+        den = float(scores.get("maximal") or 0.0)
+        frm = float(scores.get("formal") or 0.0)
 
         return {
             "filename": file.filename,
-            "analysis": result,
-            "message": "의류 분석이 완료되었습니다. (ColorfulPipeline 기반)"
+            "vector": [col, den, frm],
+            "message": "분석 완료 (UnifiedPipeline)"
         }
 
     except Exception as e:
@@ -107,7 +113,7 @@ async def analyze_clothing_dbscan(
     conf_threshold: float = 0.8,
 ):
     """
-    의류 감지 및 색상 분석 엔드포인트 (DBSCAN 기반 ColorfulPipeline)
+    호환용 엔드포인트 (통합 파이프라인 사용)
     """
     return await analyze_clothing(file=file, conf_threshold=conf_threshold)
 
