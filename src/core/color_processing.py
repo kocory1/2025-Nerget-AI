@@ -1,6 +1,7 @@
 """
 색상 처리 모듈
-이미지의 색상 변환 및 채도 추출 기능
+- 바운딩 박스 전처리와 채도(S) 기반 통계 계산
+- Colorful 파이프라인은 [x, y, S] 3D 특성에 대해 DBSCAN을 수행합니다.
 """
 
 import cv2
@@ -127,21 +128,47 @@ def extract_saturation_from_bbox(image: np.ndarray, bbox: Tuple[float, float, fl
     return saturation_values, region_info
 
 
-def analyze_region_with_clustering(image: np.ndarray, bbox: Tuple[float, float, float, float], 
-                                 eps: float = 1, trim_proportion: float = 0.4, 
-                                 verbose: bool = True) -> Dict[str, Any]:
+def analyze_region_with_clustering(
+    image: np.ndarray,
+    bbox: Tuple[float, float, float, float],
+    eps: float = 0.15,
+    trim_proportion: float = 0.2,
+    center_crop_ratio: float = 0.6,
+    min_samples_ratio: float = 0.01,
+    alpha: float = 1.0, # 위치 중요도
+    beta: float = 1.5, # 채도 중요도 
+    verbose: bool = True,
+) -> Dict[str, Any]:
     """
-    바운딩 박스 영역의 채도를 DBSCAN 클러스터링으로 분석
-    
+    [x, y, S] 3D 특성 공간에서 DBSCAN으로 군집화하고, 가장 큰 클러스터의 대표 채도로
+    화려함 점수를 산출합니다.
+
+    처리 단계(요약):
+      1) 박스 중심부 크롭(center_crop_ratio) → 배경/경계 영향 감소
+      2) HSV S 채널 추출 → 좌표 정규화(x/W, y/H)와 함께 3D 특성 [α·x, α·y, β·S] 구성
+      3) DBSCAN(eps, min_samples)으로 3D 공간에서 군집화
+      4) 각 클러스터 채도 분포의 절삭평균(또는 평균) 계산(trim_proportion)
+      5) 가장 큰 클러스터의 대표 채도를 [-1, 1] 점수로 변환
+
+    파라미터 가이드:
+      - eps: 군집 반경. ↓ 세분화, ↑ 응집
+      - min_samples_ratio: 총 픽셀 대비 최소 이웃 비율. ↓ 군집 형성 쉬움
+      - alpha(α): 위치 가중치. ↑ 공간 거리 반영↑ (가까운 픽셀만 묶임)
+      - beta(β): 채도 가중치. ↑ 채도 유사성 반영↑
+
     Args:
         image: RGB 이미지
         bbox: 바운딩 박스 (x1, y1, x2, y2)
-        eps: DBSCAN epsilon 파라미터
-        trim_proportion: 절삭평균 비율
-        verbose: 상세 출력 여부
-        
+        eps: DBSCAN epsilon(반경)
+        trim_proportion: 대표 채도 계산 시 절삭 비율(0.0~0.5)
+        center_crop_ratio: 박스 중심부 사용 비율(0~1)
+        min_samples_ratio: min_samples = round(N * 비율)
+        alpha: 위치(x,y) 축 가중치
+        beta: 채도(S) 축 가중치
+        verbose: 로그 출력 여부
+
     Returns:
-        분석 결과 딕셔너리
+        분석 결과 딕셔너리(대표 채도, 점수, 클러스터 요약 포함)
     """
     processor = ColorProcessor()
     
@@ -151,23 +178,52 @@ def analyze_region_with_clustering(image: np.ndarray, bbox: Tuple[float, float, 
     except ValueError as e:
         return {"error": str(e)}
     
+    # 가운데 영역만 사용 (center crop)
+    # - 의도: 경계/배경 픽셀 영향 감소, 관심 대상의 내부 질감/색에 집중
+    try:
+        h, w = region.shape[:2]
+        crop_ratio = float(center_crop_ratio)
+        crop_ratio = max(0.1, min(1.0, crop_ratio))
+        ch = int(round(h * crop_ratio))
+        cw = int(round(w * crop_ratio))
+        y1 = (h - ch) // 2
+        x1 = (w - cw) // 2
+        region = region[y1:y1+ch, x1:x1+cw]
+    except Exception:
+        pass
+
     if verbose:
-        print(f"  🎯 바운딩 박스 영역 분석: {region.shape[0]}x{region.shape[1]} 픽셀")
+        print(f"  🎯 바운딩 박스(센터 크롭) 영역 분석: {region.shape[0]}x{region.shape[1]} 픽셀")
     
     # RGB → HSV 변환
+    # - 채도(S) 채널만 추출
     hsv_region = cv2.cvtColor(region, cv2.COLOR_RGB2HSV)
-    saturation_values = hsv_region[:, :, 1].flatten()
+    saturation_map = hsv_region[:, :, 1].astype(np.float32)
+    saturation_values = saturation_map.flatten()
     
     if verbose:
         print(f"  🔍 분석할 픽셀 수: {len(saturation_values)}")
     
-    # DBSCAN 클러스터링
+    # 3D 특징 구성: [alpha*x_norm, alpha*y_norm, beta*S_norm]
+    h_reg, w_reg = region.shape[:2]
+    y_norm = np.linspace(0.0, 1.0, h_reg, dtype=np.float32)
+    x_norm = np.linspace(0.0, 1.0, w_reg, dtype=np.float32)
+    x_grid, y_grid = np.meshgrid(x_norm, y_norm)
+    s_norm = saturation_map / 255.0
+    features = np.stack([
+        alpha * x_grid,
+        alpha * y_grid,
+        beta * s_norm,
+    ], axis=-1).reshape(-1, 3)
+
+    # DBSCAN 클러스터링 (3D 특징 공간)
+    # - min_samples: 영역 크기에 따라 비율로 산정(하한/상한 캡)
     total_pixels = len(saturation_values)
-    min_samples = max(total_pixels // 10, 3000)  # 전체 픽셀의 5%
-    
-    saturation_data = saturation_values.reshape(-1, 1)
-    dbscan = DBSCAN(eps=eps, min_samples=min_samples)
-    labels = dbscan.fit_predict(saturation_data)
+    ratio = float(min_samples_ratio)
+    min_samples = int(max(5, min(5000, round(total_pixels * ratio))))
+
+    dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric="euclidean")
+    labels = dbscan.fit_predict(features)
     
     n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
     n_noise = list(labels).count(-1)
@@ -177,44 +233,37 @@ def analyze_region_with_clustering(image: np.ndarray, bbox: Tuple[float, float, 
         print(f"  📊 노이즈 픽셀: {n_noise}개 ({n_noise/total_pixels*100:.1f}%)")
         print(f"  📏 DBSCAN 파라미터: eps={eps}, min_samples={min_samples}")
     
-    # 클러스터 분석
+    # 클러스터 분석 (3D 특징 기반 결과)
     df_clusters = pd.DataFrame({
         'saturation': saturation_values,
         'cluster': labels
     })
-    
+
     df_filtered = df_clusters[df_clusters['cluster'] != -1].copy()
-    
+
     if len(df_filtered) == 0:
         return {"error": "유효한 클러스터가 없습니다."}
-    
-    # 클러스터별 크기와 절삭평균 계산
+
     cluster_sizes = df_filtered['cluster'].value_counts()
-    trimmed_mean_saturation_per_cluster = {}
-    
+    trimmed_mean_saturation_per_cluster: Dict[int, float] = {}
+
     for cluster_id in df_filtered['cluster'].unique():
         cluster_data = df_filtered[df_filtered['cluster'] == cluster_id]['saturation']
-        
-        if len(cluster_data) >= 10:  # 최소 10개 이상일 때만 절삭평균 적용
+        if len(cluster_data) >= 10 and trim_proportion > 0.0:
             trimmed_mean_sat = trim_mean(cluster_data, trim_proportion)
         else:
             trimmed_mean_sat = cluster_data.mean()
-        
-        trimmed_mean_saturation_per_cluster[cluster_id] = trimmed_mean_sat
-    
+        trimmed_mean_saturation_per_cluster[int(cluster_id)] = float(trimmed_mean_sat)
+
+    # 가장 큰 클러스터 선택
+    largest_cluster_id = int(cluster_sizes.idxmax())
+    largest_cluster_avg_saturation = float(trimmed_mean_saturation_per_cluster[largest_cluster_id])
+
     if verbose:
-        print(f"  📈 클러스터별 분석 (절삭평균 기준):")
-        for cluster_id in sorted(trimmed_mean_saturation_per_cluster.keys()):
-            cluster_size = cluster_sizes[cluster_id]
-            trimmed_mean_sat = trimmed_mean_saturation_per_cluster[cluster_id]
-            print(f"    클러스터 {cluster_id}: 절삭평균 채도 {trimmed_mean_sat:.1f}, 크기 {cluster_size}개")
-    
-    # 가장 큰 클러스터 선택 (배경 제거)
-    largest_cluster_id = cluster_sizes.idxmax()
-    largest_cluster_avg_saturation = trimmed_mean_saturation_per_cluster[largest_cluster_id]
-    
-    if verbose:
-        print(f"  🎯 가장 큰 클러스터 {largest_cluster_id} 선택 (크기: {cluster_sizes[largest_cluster_id]}, 절삭평균 채도: {largest_cluster_avg_saturation:.1f})")
+        desc = "절삭평균" if trim_proportion > 0.0 else "평균"
+        print(f"  📈 클러스터별 분석 ({desc} 기준):")
+        for cid in sorted(trimmed_mean_saturation_per_cluster.keys()):
+            print(f"    클러스터 {cid}: {trimmed_mean_saturation_per_cluster[cid]:.1f}, 크기 {int(cluster_sizes[cid])}")
     
     # 채도 점수 계산 (가장 큰 클러스터의 절삭평균 채도를 -1~1로 정규화)
     saturation_score = (largest_cluster_avg_saturation / 255.0) * 2 - 1
@@ -230,12 +279,150 @@ def analyze_region_with_clustering(image: np.ndarray, bbox: Tuple[float, float, 
         "total_pixels": total_pixels,
         "n_clusters": n_clusters,
         "n_noise": n_noise,
-        "cluster_sizes": cluster_sizes.to_dict(),
+        "cluster_sizes": {int(k): int(v) for k, v in cluster_sizes.to_dict().items()},
         "trimmed_means": trimmed_mean_saturation_per_cluster,
         "largest_cluster_id": largest_cluster_id,
-        "largest_cluster_size": cluster_sizes[largest_cluster_id],
+        "largest_cluster_size": int(cluster_sizes[largest_cluster_id]),
         "largest_cluster_saturation": largest_cluster_avg_saturation,
         "saturation_score": saturation_score,
         "colorfulness_score": saturation_score,
         "labels": labels
+    }
+
+
+def analyze_region_center_max(
+    image: np.ndarray,
+    bbox: Tuple[float, float, float, float],
+    center_crop_ratio: float = 0.6,
+    verbose: bool = True,
+) -> Dict[str, Any]:
+    """
+    바운딩 박스의 중심 영역만 사용하여 최대 채도를 기반으로 점수 산출.
+
+    Args:
+        image: RGB 이미지
+        bbox: (x1, y1, x2, y2)
+        center_crop_ratio: 가운데 사용할 비율 (0~1)
+        verbose: 로그 출력 여부
+
+    Returns:
+        분석 결과 딕셔너리 (클러스터링 관련 필드는 비워짐)
+    """
+    processor = ColorProcessor()
+
+    # 영역 추출
+    try:
+        region = processor.extract_region_colors(image, bbox)
+    except ValueError as e:
+        return {"error": str(e)}
+
+    # 센터 크롭
+    try:
+        h, w = region.shape[:2]
+        crop_ratio = float(center_crop_ratio)
+        crop_ratio = max(0.1, min(1.0, crop_ratio))
+        ch = int(round(h * crop_ratio))
+        cw = int(round(w * crop_ratio))
+        y1 = (h - ch) // 2
+        x1 = (w - cw) // 2
+        region = region[y1:y1+ch, x1:x1+cw]
+    except Exception:
+        pass
+
+    if verbose:
+        print(f"  🎯 바운딩 박스(센터 크롭) 영역 분석: {region.shape[0]}x{region.shape[1]} 픽셀")
+
+    # HSV 변환 및 채도 최대값
+    hsv_region = cv2.cvtColor(region, cv2.COLOR_RGB2HSV)
+    saturation_values = hsv_region[:, :, 1].astype(np.float32)
+    total_pixels = int(saturation_values.size)
+    if total_pixels == 0:
+        return {"error": "Empty center region"}
+
+    max_saturation = float(np.max(saturation_values))
+    saturation_score = (max_saturation / 255.0) * 2 - 1
+
+    if verbose:
+        print(f"  📊 영역 분석 결과 (센터 최대 채도 기준):")
+        print(f"    최대 채도: {max_saturation:.1f}")
+        print(f"    채도 점수: {saturation_score:.3f}")
+
+    return {
+        "region_shape": region.shape,
+        "total_pixels": total_pixels,
+        "n_clusters": 0,
+        "n_noise": 0,
+        "cluster_sizes": {},
+        "trimmed_means": {},
+        "largest_cluster_id": None,
+        "largest_cluster_size": None,
+        "largest_cluster_saturation": max_saturation,
+        "saturation_score": saturation_score,
+        "colorfulness_score": saturation_score,
+        "labels": None,
+    }
+
+
+def analyze_region_center_mean(
+    image: np.ndarray,
+    bbox: Tuple[float, float, float, float],
+    center_crop_ratio: float = 0.6,
+    verbose: bool = True,
+) -> Dict[str, Any]:
+    """
+    바운딩 박스의 중심 영역만 사용하여 평균 채도를 기반으로 점수 산출.
+    기존 파이프라인과의 호환성을 위해 'largest_cluster_saturation' 키에 평균을 매핑.
+    """
+    processor = ColorProcessor()
+
+    # 영역 추출
+    try:
+        region = processor.extract_region_colors(image, bbox)
+    except ValueError as e:
+        return {"error": str(e)}
+
+    # 센터 크롭
+    try:
+        h, w = region.shape[:2]
+        crop_ratio = float(center_crop_ratio)
+        crop_ratio = max(0.1, min(1.0, crop_ratio))
+        ch = int(round(h * crop_ratio))
+        cw = int(round(w * crop_ratio))
+        y1 = (h - ch) // 2
+        x1 = (w - cw) // 2
+        region = region[y1:y1+ch, x1:x1+cw]
+    except Exception:
+        pass
+
+    if verbose:
+        print(f"  🎯 바운딩 박스(센터 크롭) 영역 분석: {region.shape[0]}x{region.shape[1]} 픽셀")
+
+    # HSV 변환 및 채도 평균값
+    hsv_region = cv2.cvtColor(region, cv2.COLOR_RGB2HSV)
+    saturation_values = hsv_region[:, :, 1].astype(np.float32)
+    total_pixels = int(saturation_values.size)
+    if total_pixels == 0:
+        return {"error": "Empty center region"}
+
+    mean_saturation = float(np.mean(saturation_values))
+    saturation_score = (mean_saturation / 255.0) * 2 - 1
+
+    if verbose:
+        print(f"  📊 영역 분석 결과 (센터 평균 채도 기준):")
+        print(f"    평균 채도: {mean_saturation:.1f}")
+        print(f"    채도 점수: {saturation_score:.3f}")
+
+    return {
+        "region_shape": region.shape,
+        "total_pixels": total_pixels,
+        "n_clusters": 0,
+        "n_noise": 0,
+        "cluster_sizes": {},
+        "trimmed_means": {},
+        "largest_cluster_id": None,
+        "largest_cluster_size": None,
+        "largest_cluster_saturation": mean_saturation,
+        "saturation_score": saturation_score,
+        "colorfulness_score": saturation_score,
+        "labels": None,
     }

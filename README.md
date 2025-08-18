@@ -7,14 +7,9 @@
 - **실시간 처리** 및 배치 분석 지원
 
 ### 🎯 3가지 스타일 분류기
-- **🌈 Colorful**: 색상의 화려함과 생동감 분석 (DBSCAN+Trimmed Mean)
-- **🔥 Maximal**: 맥시멀/미니멀 성향 분석 (개발 예정)
-- **👔 Formal**: 포멀/캐주얼 격식성 분석 (라벨 기반 -1/0/1, 신뢰도 0.8 이상 단순 평균)
-
-### 🎨 고급 색상 분석 (Colorful)
-- **HSV 색상 공간** 기반 정밀 분석
-- **DBSCAN 클러스터링**으로 노이즈 제거 및 대표 색상 추출
-- **Trimmed Mean** 알고리즘으로 robust한 색상 값 계산
+- **🌈 Colorful**: 색상의 화려함 분석 (x,y,S 3D DBSCAN + Trimmed Mean, 이미지 점수=박스별 최대)
+- **🔥 Maximal**: 맥시멀/미니멀 성향 분석 (핵심 아이템 개수 기반)
+- **👔 Formal**: 포멀/캐주얼 격식성 분석 (라벨 기반 -1/0/1, conf≥0.8 평균)
 
 ### 🏗️ 엔터프라이즈 아키텍처
 - **마이크로서비스** 구조로 개별 모듈 독립 배포 가능
@@ -38,14 +33,14 @@
 │   │   └── formal_analyzer.py       # 👔 포멀/캐주얼 분석기
 │   ├── 🤖 detectors/                # 객체 감지 모듈
 │   │   └── object_detector.py       # 🔍 YOLO 객체 감지기
-│   ├── ⚡ processors/               # 결과 처리 모듈
-│   │   └── result_processor.py      # 📊 분석 결과 처리기
+│   ├── ⚙️ utils/                    # 공통 유틸리티
+│   │   └── file_utils.py            # 🔎 이미지 경로 검증
 │   ├── 🖼️ visualizers/              # 시각화 모듈
 │   │   ├── image_visualizer.py      # 🌈 Colorful 결과 시각화
 │   │   ├── formal_visualizer.py     # 👔 Formal 결과 시각화
 │   │   └── plotting.py              # 공통 플로팅 유틸
 │   ├── ⚙️ core/                     # 핵심 알고리즘
-│   │   ├── color_processing.py      # 🌈 색상 처리 & 클러스터링
+│   │   ├── color_processing.py      # 🌈 색상 처리 & x,y,S DBSCAN
 │   │   └── formal_processing.py     # 👔 포멀 스코어링(라벨 기반)
 │   ├── ⚙️ config/                   # 시스템 설정
 │   │   ├── settings.py              # 🔧 글로벌 설정
@@ -57,7 +52,9 @@
 ├── 📊 scripts/                      # 실행 스크립트
 │   └── check_yolo_labels.py        # ✅ 라벨 검증
 ├── 🧪 tests/                        # 테스트 스위트
-│   └── test_yolo_color_simple_modular.py  # 🌈 Colorful 파이프라인 테스트
+│   ├── test_colorful_pipeline.py    # 🌈 Colorful 파이프라인 테스트(랜덤 이미지)
+│   ├── test_formal_pipeline.py      # 👔 Formal 파이프라인 테스트
+│   └── test_unified_pipeline.py     # 🎯 통합 파이프라인 테스트
 ├── 📚 docs/                         # 기술 문서
 │   ├── project_structure.md        # 📋 프로젝트 구조
 │   └── *.ipynb                    # 📓 분석 노트북
@@ -84,8 +81,8 @@ pip install "transformers>=4.21.0"
 ### 2️⃣ 기본 실행
 
 ```bash
-# 🌈 Colorful 파이프라인 테스트 (권장)
-python tests/test_yolo_color_simple_modular.py
+# 🌈 Colorful 파이프라인 테스트 (랜덤 이미지)
+python tests/test_colorful_pipeline.py
 
 # 👔 Formal 파이프라인 테스트 (랜덤 샘플 1장 시각화)
 python tests/test_formal_pipeline.py
@@ -93,8 +90,8 @@ python tests/test_formal_pipeline.py
 # ✅ YOLO 라벨 검증
 python scripts/check_yolo_labels.py
 
-# 🎯 통합 분석 테스트 (추후 지원)
-# python tests/test_unified_pipeline.py
+# 🎯 통합 분석 테스트
+python tests/test_unified_pipeline.py
 ```
 
 ### 3️⃣ API 서버 시작
@@ -180,24 +177,12 @@ FormalVisualizer().visualize(image_path, detections, overall_score=0.5)
 - **출력**: 46개 패션 카테고리 감지 결과
 - **성능**: 신뢰도 0.8+ 기준 고정밀 감지
 
-### 🎨 색상 분석 알고리즘
-```python
-# 1. RGB → HSV 변환
-hsv_image = cv2.cvtColor(region, cv2.COLOR_RGB2HSV)
-
-# 2. 채도(S) 채널 추출 및 DBSCAN 클러스터링
-clustering = DBSCAN(eps=1, min_samples=total_pixels//50)
-clusters = clustering.fit_predict(saturation_values)
-
-# 3. 최대 클러스터 선택 (노이즈 제거)
-largest_cluster = max(clusters, key=cluster_size)
-
-# 4. Trimmed Mean으로 robust한 대표값 계산
-trimmed_mean = trim_mean(cluster_values, proportiontocut=0.2)
-
-# 5. 정규화된 채도 점수 계산
-saturation_score = (trimmed_mean / 255.0) * 2 - 1
-```
+### 🎨 색상 분석 알고리즘(요약)
+1) RGB→HSV, 채도(S) 추출, 박스 중심부 크롭
+2) 3D 특징 [α·x_norm, α·y_norm, β·S_norm] 구성
+3) DBSCAN(eps, min_samples)으로 군집 라벨링
+4) 각 클러스터의 채도 분포에 대해 Trimmed Mean(절삭평균) 계산
+5) 가장 큰 클러스터의 대표 채도를 [-1,1] 점수로 변환, 이미지 점수는 박스 점수 중 최대값
 
 
 ## 📊 분석 결과 해석
@@ -404,7 +389,7 @@ async def analyze_batch_images(files: List[UploadFile]):
 📊 데이터 처리:
 ├── numpy >= 1.21.0           # 수치 연산
 ├── pandas >= 1.4.0           # 데이터 분석
-└── scipy >= 1.9.0            # 과학 계산
+└── scipy >= 1.9.0            # 통계 유틸
 ```
 
 전체 의존성은 `requirements.txt` 참조.
@@ -426,7 +411,16 @@ async def analyze_batch_images(files: List[UploadFile]):
 
 ## 🆕 버전 히스토리
 
-### 0.4 (Current)
+### 0.5 (Current)
+- 🌈 Colorful: 색상 분석을 [x,y,S] 3D DBSCAN으로 전환(박스 중심부 크롭, α/β 가중치, eps/min_samples 비율 기반)
+- 🌈 Colorful: 박스별 대표 채도 점수 중 최대값을 이미지 점수로 사용(max-over-boxes)
+- 🧰 유틸: `src/utils/file_utils.validate_image_path` 추가(입력 검증 일원화)
+- 🧹 정리: `src/processors/` 모듈 제거 및 파이프라인 간소화
+- 🧪 테스트: `tests/test_colorful_pipeline.py`(랜덤 이미지), `tests/test_unified_pipeline.py` 정비
+- 📚 문서: README Colorful 알고리즘/구조/실행 방법 업데이트
+- 📦 의존성: SciPy 추가(Trimmed Mean 등 통계 유틸)
+
+### 0.4
 - ✅ Formal 파이프라인 구현(라벨 기반 -1/0/1, conf≥0.8 평균)
 - ✅ FormalVisualizer 추가 및 테스트 연동(랜덤 샘플 시각화)
 - ✅ visualizers 디렉토리 정리(공통 `plotting.py`), utils 내 시각화 제거

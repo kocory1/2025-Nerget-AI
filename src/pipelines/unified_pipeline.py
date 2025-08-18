@@ -8,6 +8,7 @@ from .base_pipeline import BasePipeline
 from .colorful_pipeline import ColorfulPipeline
 from .maximal_pipeline import MaximalPipeline
 from .formal_pipeline import FormalPipeline
+from ..utils.result_schema import build_result_schema, build_image_level_scores
 
 
 class UnifiedPipeline(BasePipeline):
@@ -70,75 +71,39 @@ class UnifiedPipeline(BasePipeline):
         return unified_result
     
     def _create_unified_result(self, results: Dict[str, Any], image_path: str) -> Dict[str, Any]:
-        """개별 분석 결과를 통합하여 최종 결과 생성"""
-        # 현재는 colorful만 성공하므로 그 결과를 기반으로 구성
-        colorful_result = results["colorful"]
-        
-        if colorful_result.get("success", False):
-            # 성공한 경우 통합 결과 구성
-            detections = colorful_result.get("detections", [])
-            
-            # 각 감지 객체에 3가지 점수 추가 (현재는 colorful만 실제 값)
-            unified_detections = []
-            for detection in detections:
-                unified_detection = detection.copy()
-                unified_detection["scores"] = {
-                    "colorful_score": detection.get("saturation_score", 0.0),
-                    # 최대화 점수는 현재 핵심 아이템 여부를 1/0로 단순 부여 (추후 고도화 가능)
-                    "maximal_score": 1.0 if detection.get("is_core_item") else 0.0,
-                    "formal_score": None
-                }
-                unified_detections.append(unified_detection)
-            
-            # Formal per-detection 매핑 (클래스/박스 매칭 단순화: region_id 기준)
-            formal_map = {}
-            if results["formal"].get("success"):
-                for fr in results["formal"].get("detections", []):
-                    formal_map[fr.get("region_id")] = fr.get("formal_score", 0.0)
+        """개별 분석 결과를 통합하여 최종 결과 생성 (부분 성공 허용)"""
+        color_s = results.get("colorful", {}).get("image_level_scores", {})
+        max_s = results.get("maximal", {}).get("image_level_scores", {})
+        form_s = results.get("formal", {}).get("image_level_scores", {})
 
-            # region_id를 키로 매핑해 scores.formal_score 채우기
-            for ud in unified_detections:
-                rid = ud.get("region_id")
-                if rid in formal_map:
-                    ud["scores"]["formal_score"] = formal_map[rid]
-                else:
-                    ud["scores"]["formal_score"] = 0.0
+        colorful_score = color_s.get("colorful")
+        maximal_score = max_s.get("maximal")
+        formal_score = form_s.get("formal")
 
-            overall_maximal_score = 0.0
-            if results["maximal"].get("success"):
-                # 이미지 수준 maximal 점수: [-1,1] 범위 점수 사용
-                overall_maximal_score = float(results["maximal"].get("maximal_score", 0.0))
+        # 벡터 형태로도 제공
+        scores = build_image_level_scores(
+            colorful=colorful_score,
+            maximal=maximal_score,
+            formal=formal_score,
+        )
 
-            return {
-                "image_path": image_path,
-                "success": True,
-                "pipeline_type": "unified",
-                "detections": unified_detections,
-                "total_detections": len(unified_detections),
-                "individual_results": {
-                    "colorful": colorful_result.get("success", False),
-                    "maximal": results["maximal"].get("success", False),
-                    "formal": results["formal"].get("success", False)
-                },
-                "overall_scores": {
-                    "colorful_score": colorful_result.get("average_score", 0.0),
-                    "maximal_score": overall_maximal_score,
-                    "formal_score": results["formal"].get("formal_overall_score", 0.0)
-                }
-            }
-        else:
-            # 실패한 경우
-            return {
-                "error": "통합 분석 실패 (colorful 분석 실패)",
-                "success": False,
-                "pipeline_type": "unified",
-                "image_path": image_path,
-                "individual_results": {
-                    "colorful": False,
-                    "maximal": False,
-                    "formal": False
-                }
-            }
+        individuals = {
+            "colorful": bool(results.get("colorful", {}).get("success", False)),
+            "maximal": bool(results.get("maximal", {}).get("success", False)),
+            "formal": bool(results.get("formal", {}).get("success", False)),
+        }
+
+        meta = {
+            "individual_results": individuals,
+        }
+
+        return build_result_schema(
+            pipeline_type="unified",
+            image_path=image_path,
+            image_level_scores=scores,
+            success=True,
+            meta=meta,
+        )
     
     def visualize_results(self, analysis_result: Dict[str, Any]) -> None:
         """통합 분석 결과 시각화"""

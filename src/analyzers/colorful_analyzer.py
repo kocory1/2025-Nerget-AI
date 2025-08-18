@@ -57,7 +57,7 @@ class ColorfulAnalyzer:
                     print(f"  신뢰도: {confidence:.3f}")
                     print(f"  바운딩 박스: {bbox}")
                 
-                # 색상 분석
+                # 색상 분석 (DBSCAN 기반만 사용)
                 color_analysis = analyze_region_with_clustering(
                     image_rgb, bbox, verbose=verbose
                 )
