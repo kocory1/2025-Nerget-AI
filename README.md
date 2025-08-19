@@ -7,7 +7,7 @@
 - **실시간 처리** 및 배치 분석 지원
 
 ### 🎯 3가지 스타일 분류기
-- **🌈 Colorful**: 색상의 화려함 분석 (x,y,S 3D DBSCAN + Trimmed Mean, 이미지 점수=박스별 최대)
+- **🌈 Colorful**: 색상의 화려함 분석 (x,y,S 3D DBSCAN + Trimmed Mean, 이미지 점수=박스별 최대, 밝은 클러스터 우선 선택 + p90 폴백)
 - **🔥 Maximal**: 맥시멀/미니멀 성향 분석 (핵심 아이템 개수 기반)
 - **👔 Formal**: 포멀/캐주얼 격식성 분석 (라벨 기반 -1/0/1, conf≥0.8 평균)
 
@@ -23,9 +23,9 @@
 2025-Nerget-AI/
 ├── 🧠 src/                          # 핵심 AI 모듈
 │   ├── 🚀 pipelines/                # 분석 파이프라인
-│   │   ├── colorful_pipeline.py     # 🌈 Colorful 분석 파이프라인
-│   │   ├── maximal_pipeline.py      # 🔥 Maximal 분석 파이프라인 (TODO)
-│   │   ├── formal_pipeline.py       # 👔 Formal 분석 파이프라인 (TODO)
+│   │   ├── colorful_pipeline.py     # 🌈 Colorful 분석 파이프라인 (감지 결과 주입형)
+│   │   ├── maximal_pipeline.py      # 🔥 Maximal 분석 파이프라인 
+│   │   ├── formal_pipeline.py       # 👔 Formal 분석 파이프라인ㅗㅎ
 │   │   ├── unified_pipeline.py      # 🎯 통합 분석 파이프라인
 │   │   └── base_pipeline.py         # 📋 파이프라인 베이스 클래스
 │   ├── 🔬 analyzers/                # 분석기 모듈
@@ -182,7 +182,7 @@ FormalVisualizer().visualize(image_path, detections, overall_score=0.5)
 2) 3D 특징 [α·x_norm, α·y_norm, β·S_norm] 구성
 3) DBSCAN(eps, min_samples)으로 군집 라벨링
 4) 각 클러스터의 채도 분포에 대해 Trimmed Mean(절삭평균) 계산
-5) 가장 큰 클러스터의 대표 채도를 [-1,1] 점수로 변환, 이미지 점수는 박스 점수 중 최대값
+5) 가장 밝은 클러스터의 대표 채도를 [-1,1] 점수로 변환(작은 면적이면 p90 폴백), 이미지 점수는 박스 점수 중 최대값
 
 
 ## 📊 분석 결과 해석
@@ -345,7 +345,8 @@ async def analyze_batch_images(files: List[UploadFile]):
 - **모델 캐싱**: 초기 로딩 후 메모리 상주
 
 ### 처리 속도 최적화
-- **병렬 처리**: 다중 영역 분석 시 멀티프로세싱 지원
+- **YOLO 1회 감지 공유**: Unified에서 감지 1회 후 3분류기 공통 사용
+- **분석 병렬화**: Colorful/Maximal/Formal 병렬 실행으로 지연 최소화
 - **GPU 가속**: CUDA 지원 (설정 시)
 - **지연 로딩**: 필요한 모듈만 선택적 로딩
 
@@ -410,15 +411,18 @@ async def analyze_batch_images(files: List[UploadFile]):
 ---
 
 ## 🆕 버전 히스토리
+### 0.6
+- ✅ 성능 개선: 통합 파이프라인 병렬화 + 단일 감지 공유로 평균 처리시간 약 2.2초 → 0.8초 (63.6% 지연 감소)
+- ✅ 구조 개선: `ColorfulPipeline`에서 감지기 분리, `UnifiedPipeline`이 단일 감지기 소유 
+- ✅ Colorful 로직 보강: 밝은 클러스터 우선 + p90 폴백, 시각화/로그 개선
 
-### 0.5 (Current)
-- 🌈 Colorful: 색상 분석을 [x,y,S] 3D DBSCAN으로 전환(박스 중심부 크롭, α/β 가중치, eps/min_samples 비율 기반)
-- 🌈 Colorful: 박스별 대표 채도 점수 중 최대값을 이미지 점수로 사용(max-over-boxes)
-- 🧰 유틸: `src/utils/file_utils.validate_image_path` 추가(입력 검증 일원화)
-- 🧹 정리: `src/processors/` 모듈 제거 및 파이프라인 간소화
-- 🧪 테스트: `tests/test_colorful_pipeline.py`(랜덤 이미지), `tests/test_unified_pipeline.py` 정비
-- 📚 문서: README Colorful 알고리즘/구조/실행 방법 업데이트
-- 📦 의존성: SciPy 추가(Trimmed Mean 등 통계 유틸)
+
+### 0.5
+- ✅ Unified 파이프라인 구현
+- ✅ Colorful 파이프라인 수정 (위치정보 + 채도의 3차원 기반 DBSCAN)
+- ✅ Processor 디렉토리 제거
+- ✅ utils/file_utils.py : 파일 입력 검증 로직 일원화
+- ✅ utils/result_schema.py : - 파이프라인 간 표준 반환 형식 일원화
 
 ### 0.4
 - ✅ Formal 파이프라인 구현(라벨 기반 -1/0/1, conf≥0.8 평균)

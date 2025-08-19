@@ -28,7 +28,8 @@ def visualize_detection_results(image: np.ndarray, results: List[Dict]) -> None:
         bbox = result['bbox']
         confidence = result['confidence']
         score = result.get('score', 0.0)
-        max_sat = result.get('max_saturation', 0.0)
+        sel_sat = result.get('selected_saturation', 0.0)
+        sel_method = result.get('selection_method', 'brightest_cluster')
         labels = result.get('labels')
         region_shape = result.get('region_shape', (100, 100, 3))
 
@@ -38,7 +39,13 @@ def visualize_detection_results(image: np.ndarray, results: List[Dict]) -> None:
         axes[0, i].set_title(f"{result['class_name']} (Score: {score:.3f})")
         rect = plt.Rectangle((x1, y1), x2 - x1, y2 - y1, fill=False, color='red', linewidth=2)
         axes[0, i].add_patch(rect)
-        label_text = f"conf:{confidence:.2f}\nscore:{score:.2f}\ntrim_sat:{max_sat:.0f}"
+        # 시각화 라벨: 선택 로직(밝은 클러스터/p90 폴백)을 명시
+        label_text = (
+            f"conf:{confidence:.2f}\n"
+            f"score:{score:.2f}\n"
+            f"sel:{sel_method}\n"
+            f"sel_sat:{sel_sat:.0f}"
+        )
         axes[0, i].text(x1, y1 - 10, label_text, fontsize=8, color='red', weight='bold',
                         bbox=dict(facecolor='white', alpha=0.7))
         axes[0, i].axis('off')
