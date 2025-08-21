@@ -55,11 +55,11 @@ FASHIONPEDIA_LABELS = {
 
 # 주요 의류 카테고리 (분석 우선순위)
 MAJOR_CLOTHING_CATEGORIES = {
-    "상의": [0, 1, 2, 3, 4, 5, 9, 10, 11],  # shirt, top, sweater, cardigan, jacket, vest, coat, dress, jumpsuit
-    "하의": [6, 7, 8],                      # pants, shorts, skirt
+    "상의": [0, 1, 2, 3, 4, 5, 9, 10, 11, 27, 28,],  # shirt, top, sweater, cardigan, jacket, vest, coat, dress, jumpsuit
+    "하의": [6, 7, 8, 20, 21, 22],                      # pants, shorts, skirt
     "신발": [23],                           # shoe
     "가방": [24],                           # bag, wallet
-    "액세서리": [13, 14, 16, 18, 19, 25]    # glasses, hat, tie, watch, belt, scarf
+    "액세서리": [13, 14,15,16 ,17, 18, 19, 25, 37, 38, 41]    # glasses, hat, tie, watch, belt, scarf
 }
 
 # 색상 분석 제외 카테고리 (구조적 요소)
