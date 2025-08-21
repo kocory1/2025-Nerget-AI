@@ -12,12 +12,16 @@ import random
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.pipelines.colorful_pipeline import ColorfulPipeline
+from src.detectors.object_detector import ObjectDetector
+
+# 우선 적용할 고정 테스트 이미지 (존재하지 않으면 랜덤 폴백)
+PREFERRED_IMAGE = "/Users/bagminsu/Documents/옷마카세_ai/2025-Nerget-AI/dataset/examples/ex3.jpeg"
 
 
 def pick_random_image() -> str:
     """Pick one random image from dataset (minimal or maximal)."""
     candidates = []
-    for d in ("dataset/minimal", "dataset/maximal"):
+    for d in ("dataset/minimal", "dataset/examples"):
         candidates.extend(glob.glob(os.path.join(d, "*.jpg")))
         candidates.extend(glob.glob(os.path.join(d, "*.jpeg")))
         candidates.extend(glob.glob(os.path.join(d, "*.png")))
@@ -36,13 +40,21 @@ def test_yolo_color_modular():
     # 1. 통합 파이프라인 초기화
     print("1. YOLOS 분석기 초기화 중... (Fashionpedia 모델)")
     pipeline = ColorfulPipeline()
+    detector = ObjectDetector()
     
     # 2. 테스트 이미지 분석
-    image_path = pick_random_image()
+    image_path = PREFERRED_IMAGE if os.path.exists(PREFERRED_IMAGE) else pick_random_image()
     print(f"Selected test image: {image_path}")
     
-    # 3. 감지 및 분석 실행
-    result = pipeline.detect_and_analyze(image_path, conf_threshold=0.8, verbose=True, return_detections=True)
+    # 3. 감지 1회 수행 후 Colorful 분석 실행
+    detections = detector.detect_objects(image_path, conf_threshold=0.8, verbose=True)
+    result = pipeline.detect_and_analyze(
+        image_path,
+        conf_threshold=0.8,
+        verbose=True,
+        return_detections=True,
+        precomputed_detections=detections,
+    )
     
     if result.get("success", False):
         # 4. 시각화

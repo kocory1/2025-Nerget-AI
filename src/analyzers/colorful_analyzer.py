@@ -71,7 +71,10 @@ class ColorfulAnalyzer:
                         'bbox': bbox,
                         'score': color_analysis['saturation_score'],
                         'saturation_score': color_analysis['saturation_score'],
-                        'max_saturation': color_analysis['largest_cluster_saturation'],
+                        # 선택된 대표 채도(밝은 클러스터 또는 p90 폴백)
+                        'max_saturation': color_analysis.get('selected_cluster_saturation'),
+                        'selected_saturation': color_analysis.get('selected_cluster_saturation', color_analysis.get('largest_cluster_saturation')),
+                        'selection_method': color_analysis.get('selection_method', 'largest_cluster'),
                         'n_clusters': color_analysis['n_clusters'],
                         'n_noise': color_analysis['n_noise'],
                         'labels': color_analysis['labels'],

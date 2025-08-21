@@ -4,6 +4,7 @@ YOLO 감지와 MaximalAnalyzer를 통합하여 미니멀/맥시멀을 판단하�
 """
 
 from typing import Dict, Any
+from typing import List, Optional
 from .base_pipeline import BasePipeline
 from ..detectors.object_detector import ObjectDetector
 from ..analyzers.maximal_analyzer import MaximalAnalyzer
@@ -18,7 +19,14 @@ class MaximalPipeline(BasePipeline):
         self.detector = ObjectDetector()
         self.analyzer = MaximalAnalyzer(threshold=threshold)
 
-    def detect_and_analyze(self, image_path: str, conf_threshold: float = 0.8, verbose: bool = True, **kwargs) -> Dict[str, Any]:
+    def detect_and_analyze(
+        self,
+        image_path: str,
+        conf_threshold: float = 0.8,
+        verbose: bool = True,
+        precomputed_detections: Optional[List[Dict[str, Any]]] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
         """
         이미지에서 객체를 감지하고 maximal 분석
 
@@ -36,16 +44,23 @@ class MaximalPipeline(BasePipeline):
             return failure_schema("maximal", image_path, validation.get("error", "Invalid input"))
 
         # YOLO 준비 확인
-        if not self.detector.is_ready():
+        if precomputed_detections is None and not self.detector.is_ready():
             return failure_schema("maximal", image_path, "YOLO 분석기가 초기화되지 않았습니다.")
 
         if verbose:
             from os.path import basename
             print(f"테스트 이미지: {basename(image_path)}")
-            print("\n2. YOLO 객체 감지 중...")
+            print("\n2. 감지 단계")
 
         # 감지
-        detections = self.detector.detect_objects(image_path, conf_threshold=conf_threshold, verbose=verbose)
+        if precomputed_detections is not None:
+            detections = precomputed_detections
+            if verbose:
+                print("   - 사전 감지 결과 재사용")
+        else:
+            if verbose:
+                print("   - YOLO 객체 감지 수행")
+            detections = self.detector.detect_objects(image_path, conf_threshold=conf_threshold, verbose=verbose)
         if not detections:
             return failure_schema("maximal", image_path, "감지된 객체가 없습니다.")
 

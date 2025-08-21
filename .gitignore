@@ -4,4 +4,19 @@ yolov8n.pt
 datasets/
 ClothingParts_v1i_yolov11/
 
+__pycache__/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+.env
+.DS_Store
 __pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+.env
+.DS_Store

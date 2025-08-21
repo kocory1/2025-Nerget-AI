@@ -136,19 +136,19 @@ def analyze_region_with_clustering(
     center_crop_ratio: float = 0.6,
     min_samples_ratio: float = 0.01,
     alpha: float = 1.0, # 위치 중요도
-    beta: float = 1.5, # 채도 중요도 
+    beta: float = 2, # 채도 중요도 
     verbose: bool = True,
 ) -> Dict[str, Any]:
     """
-    [x, y, S] 3D 특성 공간에서 DBSCAN으로 군집화하고, 가장 큰 클러스터의 대표 채도로
-    화려함 점수를 산출합니다.
+    [x, y, S] 3D 특성 공간에서 DBSCAN으로 군집화하고, 가장 높은 클러스터의 채도값으로
+    화려함 점수를 산출
 
     처리 단계(요약):
       1) 박스 중심부 크롭(center_crop_ratio) → 배경/경계 영향 감소
       2) HSV S 채널 추출 → 좌표 정규화(x/W, y/H)와 함께 3D 특성 [α·x, α·y, β·S] 구성
       3) DBSCAN(eps, min_samples)으로 3D 공간에서 군집화
       4) 각 클러스터 채도 분포의 절삭평균(또는 평균) 계산(trim_proportion)
-      5) 가장 큰 클러스터의 대표 채도를 [-1, 1] 점수로 변환
+      5) 가장 높은 채도값 반환
 
     파라미터 가이드:
       - eps: 군집 반경. ↓ 세분화, ↑ 응집
@@ -255,9 +255,11 @@ def analyze_region_with_clustering(
             trimmed_mean_sat = cluster_data.mean()
         trimmed_mean_saturation_per_cluster[int(cluster_id)] = float(trimmed_mean_sat)
 
-    # 가장 큰 클러스터 선택
-    largest_cluster_id = int(cluster_sizes.idxmax())
-    largest_cluster_avg_saturation = float(trimmed_mean_saturation_per_cluster[largest_cluster_id])
+    # 가장 밝은 클러스터 선택 (절삭평균 기준)
+    brightest_cluster_id = int(max(
+        trimmed_mean_saturation_per_cluster, key=trimmed_mean_saturation_per_cluster.get
+    ))
+    brightest_cluster_avg_saturation = float(trimmed_mean_saturation_per_cluster[brightest_cluster_id])
 
     if verbose:
         desc = "절삭평균" if trim_proportion > 0.0 else "평균"
@@ -265,12 +267,27 @@ def analyze_region_with_clustering(
         for cid in sorted(trimmed_mean_saturation_per_cluster.keys()):
             print(f"    클러스터 {cid}: {trimmed_mean_saturation_per_cluster[cid]:.1f}, 크기 {int(cluster_sizes[cid])}")
     
-    # 채도 점수 계산 (가장 큰 클러스터의 절삭평균 채도를 -1~1로 정규화)
-    saturation_score = (largest_cluster_avg_saturation / 255.0) * 2 - 1
+    # 선택 로직: 작은 면적의 고채도 무늬가 무시되지 않도록 '밝은 클러스터' 우선
+    # 단, 해당 클러스터가 지나치게 작으면(비노이즈 픽셀의 3% 미만) 90퍼센타일로 폴백
+    valid_pixel_count = int(len(df_filtered))
+    selected_cluster_size = int(cluster_sizes.get(brightest_cluster_id, 0))
+    min_ratio = 0.03
+    selection_method = "brightest_cluster"
+
+    if valid_pixel_count > 0 and (selected_cluster_size / valid_pixel_count) < min_ratio:
+        # 폴백: 90th percentile 사용
+        q90 = float(np.percentile(df_filtered['saturation'].values, 90))
+        selected_avg_saturation = q90
+        selection_method = "percentile_90_fallback"
+    else:
+        selected_avg_saturation = brightest_cluster_avg_saturation
+
+    # 채도 점수 계산 (-1~1 정규화)
+    saturation_score = (selected_avg_saturation / 255.0) * 2 - 1
     
     if verbose:
-        print(f"  📊 영역 분석 결과 (가장 큰 클러스터 절삭평균 기준):")
-        print(f"    절삭평균 채도: {largest_cluster_avg_saturation:.1f}")
+        print(f"  📊 영역 분석 결과 (선택 로직: {selection_method}):")
+        print(f"    선택된 대표 채도: {selected_avg_saturation:.1f}")
         print(f"    채도 점수: {saturation_score:.3f}")
         print(f"    화려함 점수: {saturation_score:.3f}")
     
@@ -281,9 +298,10 @@ def analyze_region_with_clustering(
         "n_noise": n_noise,
         "cluster_sizes": {int(k): int(v) for k, v in cluster_sizes.to_dict().items()},
         "trimmed_means": trimmed_mean_saturation_per_cluster,
-        "largest_cluster_id": largest_cluster_id,
-        "largest_cluster_size": int(cluster_sizes[largest_cluster_id]),
-        "largest_cluster_saturation": largest_cluster_avg_saturation,
+        "brightest_cluster_id": brightest_cluster_id,
+        "brightest_cluster_saturation": brightest_cluster_avg_saturation,
+        "selected_cluster_saturation": selected_avg_saturation,
+        "selection_method": selection_method,
         "saturation_score": saturation_score,
         "colorfulness_score": saturation_score,
         "labels": labels

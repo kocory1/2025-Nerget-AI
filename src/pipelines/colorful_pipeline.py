@@ -4,10 +4,9 @@ YOLO 감지와 색상 분석을 통합하여 colorful 점수를 산출하는 모
 """
 
 import os
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 
 from .base_pipeline import BasePipeline
-from ..detectors.object_detector import ObjectDetector
 from ..analyzers.colorful_analyzer import ColorfulAnalyzer
 from ..visualizers.image_visualizer import ImageVisualizer
 from ..utils.file_utils import validate_image_path
@@ -19,12 +18,17 @@ class ColorfulPipeline(BasePipeline):
     
     def __init__(self):
         """파이프라인 초기화"""
-        self.detector = ObjectDetector()
         self.analyzer = ColorfulAnalyzer()
         self.visualizer = ImageVisualizer()
     
-    def detect_and_analyze(self, image_path: str, conf_threshold: float = 0.8, 
-                          verbose: bool = True, return_detections: bool = False) -> Dict[str, Any]:
+    def detect_and_analyze(
+        self,
+        image_path: str,
+        conf_threshold: float = 0.7,
+        verbose: bool = True,
+        return_detections: bool = False,
+        precomputed_detections: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
         """
         이미지에서 객체를 감지하고 색상을 분석
         
@@ -41,30 +45,25 @@ class ColorfulPipeline(BasePipeline):
         if validation:
             return failure_schema("colorful", image_path, validation.get("error", "Invalid input"))
         
-        # 2. YOLO 분석기 상태 확인
-        if not self.detector.is_ready():
-            return failure_schema("colorful", image_path, "YOLO 분석기가 초기화되지 않았습니다.")
+        # 2. 감지 결과 필수 (detector는 통합 파이프라인에서 수행)
+        if precomputed_detections is None:
+            return failure_schema("colorful", image_path, "사전 감지 결과가 필요합니다.")
         
         if verbose:
             print(f"📸 테스트 이미지: {os.path.basename(image_path)}")
         
         try:
-            # 3. 객체 감지
+            # 3. 사전 감지 결과 사용
+            detections = precomputed_detections
             if verbose:
-                print("\\n2. YOLO 객체 감지 중...")
-            
-            detections = self.detector.detect_objects(
-                image_path, 
-                conf_threshold=conf_threshold, 
-                verbose=verbose
-            )
+                print("\n2. 사전 감지 결과 재사용 중...")
             
             if not detections:
                 return failure_schema("colorful", image_path, "감지된 객체가 없습니다.")
             
             # 4. 색상 분석
             if verbose:
-                print("\\n3. 각 영역별 색상 분석...")
+                print("\n3. 각 영역별 색상 분석...")
             
             analyzed_results = self.analyzer.analyze_detections(
                 image_path, 
@@ -117,5 +116,5 @@ class ColorfulPipeline(BasePipeline):
             print(f"❌ 시각화 중 오류 발생: {e}")
     
     def is_ready(self) -> bool:
-        """파이프라인이 사용 가능한지 확인"""
-        return self.detector.is_ready()
+        """감지기와의 결합을 제거했으므로 항상 사용 가능"""
+        return True

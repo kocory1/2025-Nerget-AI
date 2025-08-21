@@ -50,6 +50,29 @@ API_CONFIG = {
     "max_file_size": 10 * 1024 * 1024  # 최대 파일 크기 (10MB)
 }
 
+# Database 설정 (환경변수 우선)
+import os
+
+DATABASE_CONFIG = {
+    "host": os.getenv("DB_HOST", "127.0.0.1"),
+    "port": int(os.getenv("DB_PORT", "3306")),
+    "user": os.getenv("DB_USER", "root"),
+    "password": os.getenv("DB_PASSWORD", ""),
+    "database": os.getenv("DB_NAME", "nerget_ai"),
+}
+
+def get_async_mysql_url() -> str:
+    user = DATABASE_CONFIG["user"]
+    password = DATABASE_CONFIG["password"]
+    host = DATABASE_CONFIG["host"]
+    port = DATABASE_CONFIG["port"]
+    database = DATABASE_CONFIG["database"]
+    if password:
+        return f"mysql+aiomysql://{user}:{password}@{host}:{port}/{database}?charset=utf8mb4"
+    return f"mysql+aiomysql://{user}@{host}:{port}/{database}?charset=utf8mb4"
+
+
+
 def get_dbscan_params(total_pixels: int) -> dict:
     """픽셀 수에 따른 DBSCAN 파라미터 반환"""
     min_samples = max(1, total_pixels // DBSCAN_CONFIG["min_samples_ratio"])
