@@ -9,7 +9,7 @@
 ### 🎯 3가지 스타일 분류기
 - **🌈 Colorful**: 색상의 화려함 분석 (x,y,S 3D DBSCAN + Trimmed Mean, 이미지 점수=박스별 최대, 밝은 클러스터 우선 선택 + p90 폴백)
 - **🔥 Maximal**: 맥시멀/미니멀 성향 분석 (핵심 아이템 개수 기반)
-- **👔 Formal**: 포멀/캐주얼 격식성 분석 (라벨 기반 -1/0/1, conf≥0.8 평균)
+- **👔 Formal**: 포멀/캐주얼 격식성 분석 (클래스 중복 제거 합계, tanh 스무딩; conf≥0.8)
 
 ### 🏗️ 엔터프라이즈 아키텍처
 - **마이크로서비스** 구조로 개별 모듈 독립 배포 가능
@@ -25,7 +25,7 @@
 │   ├── 🚀 pipelines/                # 분석 파이프라인
 │   │   ├── colorful_pipeline.py     # 🌈 Colorful 분석 파이프라인 (감지 결과 주입형)
 │   │   ├── maximal_pipeline.py      # 🔥 Maximal 분석 파이프라인 
-│   │   ├── formal_pipeline.py       # 👔 Formal 분석 파이프라인ㅗㅎ
+│   │   ├── formal_pipeline.py       # 👔 Formal 분석 파이프라인
 │   │   ├── unified_pipeline.py      # 🎯 통합 분석 파이프라인
 │   │   └── base_pipeline.py         # 📋 파이프라인 베이스 클래스
 │   ├── 🔬 analyzers/                # 분석기 모듈
@@ -41,19 +41,22 @@
 │   │   └── plotting.py              # 공통 플로팅 유틸
 │   ├── ⚙️ core/                     # 핵심 알고리즘
 │   │   ├── color_processing.py      # 🌈 색상 처리 & x,y,S DBSCAN
-│   │   └── formal_processing.py     # 👔 포멀 스코어링(라벨 기반)
+│   │   └── formal_processing.py     # 👔 포멀 스코어링(dedup + tanh 스무딩)
 │   ├── ⚙️ config/                   # 시스템 설정
 │   │   ├── settings.py              # 🔧 글로벌 설정
 │   │   └── labels.py               # 🏷️ 카테고리 라벨
 │   ├── 🤖 models/                   # 기존 모델 (호환성)
 │   │   └── yolos_detector.py        # 🔍 YOLO 모델 래퍼
 │   └── 🌐 api/                      # REST API 서버
-│       └── main.py                 # 🚀 FastAPI 애플리케이션
+│       ├── main.py                 # 🚀 FastAPI 애플리케이션 (라우터 포함)
+│       └── routers/                # 라우터 모듈
+│           ├── health.py           # /health, /db/health
+│           └── images.py           # /images/analyze
 ├── 📊 scripts/                      # 실행 스크립트
 │   └── check_yolo_labels.py        # ✅ 라벨 검증
 ├── 🧪 tests/                        # 테스트 스위트
-│   ├── test_colorful_pipeline.py    # 🌈 Colorful 파이프라인 테스트(랜덤 이미지)
-│   ├── test_formal_pipeline.py      # 👔 Formal 파이프라인 테스트
+│   ├── test_colorful_pipeline.py    # 🌈 Colorful 테스트(고정 이미지 우선 + 랜덤)
+│   ├── test_formal_pipeline.py      # 👔 Formal 테스트(고정 이미지 우선 + 라벨 프리뷰)
 │   └── test_unified_pipeline.py     # 🎯 통합 파이프라인 테스트
 ├── 📚 docs/                         # 기술 문서
 │   ├── project_structure.md        # 📋 프로젝트 구조
@@ -411,6 +414,12 @@ async def analyze_batch_images(files: List[UploadFile]):
 ---
 
 ## 🆕 버전 히스토리
+### 0.7
+- ✅: FastAPI 라우터 분리(`api/routers/health.py`, `api/routers/images.py`)
+- ✅: 라벨 점수 합산 후 클래스 중복 제거 + tanh 스무딩 적용, conf≥0.8 유지
+- ✅: `test_colorful_pipeline.py`/`test_formal_pipeline.py`에 고정 샘플 우선/라벨 프리뷰 추가
+- ✅: 최소 연결 유틸 추가(`/db/health`), 설정은 환경변수(`DB_HOST` 등) 기반
+
 ### 0.6
 - ✅ 성능 개선: 통합 파이프라인 병렬화 + 단일 감지 공유로 평균 처리시간 약 2.2초 → 0.8초 (63.6% 지연 감소)
 - ✅ 구조 개선: `ColorfulPipeline`에서 감지기 분리, `UnifiedPipeline`이 단일 감지기 소유 

@@ -64,7 +64,7 @@ MAJOR_CLOTHING_CATEGORIES = {
 
 # 색상 분석 제외 카테고리 (구조적 요소)
 EXCLUDE_FROM_COLOR_ANALYSIS = [
-    27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45
+    27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 19
 ]  # hood, collar, lapel, epaulette, sleeve, pocket, neckline, buckle, zipper, applique, bead, bow, flower, fringe, ribbon, rivet, ruffle, sequin, tassel
 
 def get_label_name(class_id: int) -> str:

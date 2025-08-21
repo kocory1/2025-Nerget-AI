@@ -63,18 +63,22 @@ class FormalPipeline(BasePipeline):
                     meta=meta,
                 )
 
-            # Core formal processing (consistency with Colorful core design)
+            # Core formal processing (dedup + tanh smoothing)
             agg = analyze_formality_detections(filtered, conf_threshold=conf_threshold, verbose=verbose)
             analyzed = agg["analyzed"]
-            overall = agg["overall"]
+            formal_score = agg["formal_score"]
+            predicted_label = agg["predicted_label"]
 
             if verbose:
-                print(f"\n📋 Formal 최종 스코어(단순 평균): {overall:.3f}")
+                print(f"\n📋 Formal 최종 스코어(tanh): {formal_score:.3f} ({predicted_label})")
 
-            scores = build_image_level_scores(formal=overall)
+            scores = build_image_level_scores(formal=formal_score)
             meta = {
                 "total_detections": len(detections),
                 "contributing_detections": agg.get("contributing", 0),
+                "unique_classes": agg.get("unique_classes", 0),
+                "sum_score": agg.get("sum_score", 0),
+                "predicted_label": predicted_label,
                 "insufficient_evidence": agg.get("insufficient_evidence", False),
             }
             return build_result_schema(
