@@ -20,3 +20,18 @@ __pycache__/
 venv/
 .env
 .DS_Store
+# macOS
+.DS_Store
+
+# datasets
+dataset/**
+!dataset/examples/**
+
+# runs artifacts
+runs/**
+!runs/unified_csv/**/vectors.csv
+
+# caches/compiled
+__pycache__/
+*.pyc
+
