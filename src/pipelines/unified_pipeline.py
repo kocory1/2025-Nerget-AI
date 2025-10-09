@@ -24,7 +24,7 @@ class UnifiedPipeline(BasePipeline):
         self.maximal_pipeline = MaximalPipeline()
         self.formal_pipeline = FormalPipeline()
     
-    def detect_and_analyze(self, image_path: str, conf_threshold: float = 0.8, 
+    def detect_and_analyze(self, image_path: str, conf_threshold: float = 0.4, 
                           verbose: bool = True) -> Dict[str, Any]:
         """
         이미지에서 3가지 분석을 모두 수행

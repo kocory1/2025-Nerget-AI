@@ -62,22 +62,22 @@ def analyze_formality_detections(
 
     # 3) Dedup by class_id (only count once per class)
     seen = set()
-    unique_scores: List[int] = []
+    unique_scores: List[float] = []
     for a in analyzed:
         cid = a.get("class_id")
         if cid in seen:
             continue
         seen.add(cid)
-        unique_scores.append(int(a.get("formal_score", 0)))
+        unique_scores.append(float(a.get("formal_score", 0.0)))
 
-    sum_score = int(sum(unique_scores))
+    sum_score = float(sum(unique_scores))
     unique_count = len(unique_scores)
 
     # 4) Compute smoothed score (like maximal tanh smoothing)
     formal_score = compute_formal_score(sum_score, unique_count)
 
     # 5) Predicted label
-    predicted_label = "Formal" if sum_score > 0 else "Casual"
+    predicted_label = "Formal" if sum_score > 0.0 else "Casual"
 
     if verbose:
         print(f"Formal dedup unique_classes={unique_count}, sum={sum_score} -> score={formal_score:.3f} ({predicted_label})")

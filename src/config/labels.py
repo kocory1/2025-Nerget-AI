@@ -55,7 +55,7 @@ FASHIONPEDIA_LABELS = {
 
 # 주요 의류 카테고리 (분석 우선순위)
 MAJOR_CLOTHING_CATEGORIES = {
-    "상의": [0, 1, 2, 3, 4, 5, 9, 10, 11, 27, 28,],  # shirt, top, sweater, cardigan, jacket, vest, coat, dress, jumpsuit
+    "상의": [0, 1, 2, 3, 4, 5, 9, 10, 11, 27, 28],  # shirt, top, sweater, cardigan, jacket, vest, coat, dress, jumpsuit
     "하의": [6, 7, 8, 20, 21, 22],                      # pants, shorts, skirt
     "신발": [23],                           # shoe
     "가방": [24],                           # bag, wallet
@@ -89,41 +89,59 @@ def should_analyze_color(class_id: int) -> bool:
 # NOTE: 초기 버전은 라벨 기반 휴리스틱 점수(1/0/-1)만 사용합니다.
 #       추후 가중치/컨텍스트 기반 보정 로직을 추가할 예정입니다.
 
-# 포멀(+1) 후보 라벨
+# 과 포멀 (+1) 후보 라벨 
+FORMAL_IDS_PLUS_2 = {
+    10,  # dress
+    16,  # tie
+    28,  # collar
+    29   # lapel
+}
+# 포멀(+0.7) 후보 라벨
 FORMAL_IDS = {
+    19,  # belt
+    25,  # scarf
+    32,  # pocket
+    34,  # buckle
+    35   # zipper
+}
+
+# 살짝 포멀(0.4) 후보 라벨
+FORMAL_IDS_PLUS_0_5 = {
+    9,   # coat
+    18,  # watch
     0,   # shirt, blouse
     2,   # sweater
     3,   # cardigan
-    4,   # jacket
-    5,   # vest
-    9,   # coat
-    10,  # dress
-    16,  # tie
-    18,  # watch
-    19,  # belt
-    25,  # scarf
-    29,  # lapel
-    32,  # pocket
-    34,  # buckle
-    35,  # zipper
-    28,  # collar
     21,  # tights, stockings
+    5,   # vest
+    13 # glasses
 }
-
-# 캐주얼(-1) 후보 라벨
+# 캐주얼(-0.8) 후보 라벨
 CASUAL_IDS = {
-    1,   # top, t-shirt, sweatshirt
-    7,   # shorts
-    14,  # hat
     15,  # headband, head covering, hair accessory
     17,  # glove
     20,  # leg warmer
+    11 # jumpsuit
+}
+
+# 과캐주얼(-1) 후보 라벨 
+CASUAL_IDS_MINUS_2 = {
     27,  # hood
-    11,  # jumpsuit
+    7,   # shorts
+    1 # top, t-shirt, sweatshirt
+}
+
+# 살짝 캐주얼(-0.3) 후보 라벨
+CASUAL_IDS_PLUS_0_5 = {
+    14,  # hat
+    8,   # skirt
+    
+    
 }
 
 # 중립(0) 라벨
 NEUTRAL_IDS = {
+    4,   # jacket
     30,  # epaulette
     36,  # applique
     37,  # bead
@@ -133,25 +151,27 @@ NEUTRAL_IDS = {
     42,  # rivet
     43,  # ruffle
     44,  # sequin
-    13,  # glasses
     24,  # bag, wallet
-    8,   # skirt
 }
 
 # 클래스ID별 포멀 점수 매핑 (-1, 0, 1)
 FORMALITY_SCORE = {
-    **{cid: 1 for cid in FORMAL_IDS},
-    **{cid: -1 for cid in CASUAL_IDS},
+    **{cid: 0.7 for cid in FORMAL_IDS},
+    **{cid: -0.8 for cid in CASUAL_IDS},
     **{cid: 0 for cid in NEUTRAL_IDS},
+    **{cid: 0.4 for cid in FORMAL_IDS_PLUS_0_5},
+    **{cid: 1 for cid in FORMAL_IDS_PLUS_2},
+    **{cid: -1 for cid in CASUAL_IDS_MINUS_2},
+    **{cid: -0.3 for cid in CASUAL_IDS_PLUS_0_5},
 }
 
 
-def get_formality_score(class_id: int) -> int:
-    """클래스 ID의 포멀 점수 반환 (-1: 캐주얼, 0: 중립, 1: 포멀)
+def get_formality_score(class_id: int) -> float:
+    """클래스 ID의 포멀 점수 반환 (연속값, 예: -1.0, -0.8, -0.3, 0.0, 0.4, 0.7, 1.0)
 
-    정의되지 않은 라벨은 기본 0으로 처리합니다.
+    정의되지 않은 라벨은 기본 0.0으로 처리합니다.
     """
-    return int(FORMALITY_SCORE.get(class_id, 0))
+    return float(FORMALITY_SCORE.get(class_id, 0.0))
 
 
 def get_formality_label(score: int) -> str:

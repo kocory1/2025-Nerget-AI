@@ -113,20 +113,10 @@ class YOLOSDetector:
         return detections
     
     def load_image_as_rgb(self, image_path: str) -> np.ndarray:
-        """
-        이미지를 RGB 배열로 로드
-        
-        Args:
-            image_path: 이미지 파일 경로
-            
-        Returns:
-            RGB 이미지 배열 (H, W, 3)
-        """
+        """이미지를 RGB 배열로 로드 (cv2 사용)."""
         image = cv2.imread(image_path)
         if image is None:
             raise ValueError(f"Cannot load image: {image_path}")
-        
-        # BGR to RGB 변환
         image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         return image_rgb
     

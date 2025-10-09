@@ -12,6 +12,7 @@ if PROJECT_ROOT not in sys.path:
 from src.config.settings import API_CONFIG
 from src.api.routers.health import router as health_router
 from src.api.routers.images import router as images_router
+from src.api.routers.reco import router as reco_router
 
 app = FastAPI(
     title="너겟 AI API",
@@ -37,6 +38,7 @@ async def root():
 # Include routers
 app.include_router(health_router)
 app.include_router(images_router)
+app.include_router(reco_router)
 
 
 if __name__ == "__main__":
