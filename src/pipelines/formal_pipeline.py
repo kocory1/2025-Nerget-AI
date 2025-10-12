@@ -16,8 +16,8 @@ class FormalPipeline(BasePipeline):
     """Formal 분석 파이프라인 (포멀/캐주얼 분석)"""
     
     def __init__(self):
-        """파이프라인 초기화"""
-        self.detector = ObjectDetector()
+        """파이프라인 초기화 (YOLO 지연 초기화)"""
+        self.detector = None
         self.analyzer = FormalAnalyzer()
     
     def detect_and_analyze(
@@ -31,8 +31,11 @@ class FormalPipeline(BasePipeline):
         이미지에서 객체를 감지하고 formal 분석
         - 신뢰도 0.8 이상 감지만 사용하여 단순 평균(-1/0/1) 산출
         """
-        if precomputed_detections is None and not self.detector.is_ready():
-            return failure_schema("formal", image_path, "YOLO 분석기가 초기화되지 않았습니다.")
+        if precomputed_detections is None:
+            if self.detector is None:
+                self.detector = ObjectDetector()
+            if not self.detector.is_ready():
+                return failure_schema("formal", image_path, "YOLO 분석기가 초기화되지 않았습니다.")
 
         try:
             if verbose:
@@ -43,6 +46,8 @@ class FormalPipeline(BasePipeline):
                 if verbose:
                     print("   - 사전 감지 결과 재사용")
             else:
+                if self.detector is None:
+                    self.detector = ObjectDetector()
                 detections = self.detector.detect_objects(image_path, conf_threshold=conf_threshold, verbose=verbose)
 
             # 신뢰도 0.8 이상 필터

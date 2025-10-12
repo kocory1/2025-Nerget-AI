@@ -127,18 +127,6 @@ def extract_saturation_from_bbox(image: np.ndarray, bbox: Tuple[float, float, fl
     
     return saturation_values, region_info
 
-
-def analyze_region_with_clustering(
-    image: np.ndarray,
-    bbox: Tuple[float, float, float, float],
-    eps: float = 0.15,
-    trim_proportion: float = 0.2,
-    center_crop_ratio: float = 0.6,
-    min_samples_ratio: float = 0.01,
-    alpha: float = 1.0, # 위치 중요도
-    beta: float = 2, # 채도 중요도 
-    verbose: bool = True,
-) -> Dict[str, Any]:
     """
     [x, y, S] 3D 특성 공간에서 DBSCAN으로 군집화하고, 가장 높은 클러스터의 채도값으로
     화려함 점수를 산출
@@ -170,6 +158,18 @@ def analyze_region_with_clustering(
     Returns:
         분석 결과 딕셔너리(대표 채도, 점수, 클러스터 요약 포함)
     """
+def analyze_region_with_clustering(
+    image: np.ndarray,
+    bbox: Tuple[float, float, float, float],
+    eps: float = 0.15,
+    trim_proportion: float = 0.2,
+    center_crop_ratio: float = 0.6,
+    min_samples_ratio: float = 0.01,
+    alpha: float = 1.0, # 위치 중요도
+    beta: float = 2, # 채도 중요도 
+    verbose: bool = True,
+) -> Dict[str, Any]:
+
     processor = ColorProcessor()
     
     # 영역 추출

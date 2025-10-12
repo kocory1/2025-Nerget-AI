@@ -16,7 +16,8 @@ class MaximalPipeline(BasePipeline):
     """Maximal 분석 파이프라인 (맥시멀/미니멀 분석)"""
 
     def __init__(self, threshold: int = 5):
-        self.detector = ObjectDetector()
+        # 지연 초기화: 통합 파이프라인에서 사전 감지를 주는 경우 YOLO 로딩을 피함
+        self.detector = None
         self.analyzer = MaximalAnalyzer(threshold=threshold)
 
     def detect_and_analyze(
@@ -43,9 +44,12 @@ class MaximalPipeline(BasePipeline):
         if validation:
             return failure_schema("maximal", image_path, validation.get("error", "Invalid input"))
 
-        # YOLO 준비 확인
-        if precomputed_detections is None and not self.detector.is_ready():
-            return failure_schema("maximal", image_path, "YOLO 분석기가 초기화되지 않았습니다.")
+        # YOLO 준비 확인 (지연 초기화)
+        if precomputed_detections is None:
+            if self.detector is None:
+                self.detector = ObjectDetector()
+            if not self.detector.is_ready():
+                return failure_schema("maximal", image_path, "YOLO 분석기가 초기화되지 않았습니다.")
 
         if verbose:
             from os.path import basename
@@ -60,6 +64,9 @@ class MaximalPipeline(BasePipeline):
         else:
             if verbose:
                 print("   - YOLO 객체 감지 수행")
+            # 지연 초기화 후 사용
+            if self.detector is None:
+                self.detector = ObjectDetector()
             detections = self.detector.detect_objects(image_path, conf_threshold=conf_threshold, verbose=verbose)
         if not detections:
             return failure_schema("maximal", image_path, "감지된 객체가 없습니다.")

@@ -1,106 +1,67 @@
 """
 Colorful 분석 모듈
-감지된 객체 영역의 색상을 분석하여 colorful 점수를 산출하는 모듈
+감지된 박스별 색상 채도를 분석하여 이미지 레벨 colorful 점수 산출의 근거를 제공합니다.
 """
 
-import cv2
-import numpy as np
 from typing import List, Dict, Any
+import numpy as np
+from PIL import Image
 
-from ..core.color_processing import analyze_region_with_clustering
+
+def _load_image_rgb(path: str) -> np.ndarray:
+    img = Image.open(path).convert("RGB")
+    return np.asarray(img)
+
+
+def _saturation_from_rgb(rgb: np.ndarray) -> float:
+    # 간단한 채도 근사: HSV 변환 없이 RGB 분산 기반 근사 (0~1 범위)
+    # 표준화: 채널별 [0,1] 스케일 후 표준편차를 채도로 사용
+    if rgb.ndim != 3 or rgb.shape[2] != 3:
+        return 0.0
+    arr = rgb.astype(np.float32) / 255.0
+    std = float(arr.reshape(-1, 3).std())
+    # 안정화 및 상한
+    return max(0.0, min(1.0, std * 1.5))
 
 
 class ColorfulAnalyzer:
-    """Colorful 분석기 (색상 화려함 분석)"""
-    
-    def __init__(self):
-        """분석기 초기화"""
-        pass
-    
-    def analyze_detections(self, image_path: str, detections: List[Dict[str, Any]], 
-                          verbose: bool = True) -> List[Dict[str, Any]]:
-        """
-        감지된 객체들의 색상을 분석
-        
-        Args:
-            image_path: 이미지 파일 경로
-            detections: 감지된 객체들의 리스트
-            verbose: 상세 출력 여부
-            
-        Returns:
-            색상 분석 결과가 포함된 객체 리스트
-        """
+    """Colorful 분석기 (채도 근사 기반)
+
+    실제 프로덕션 알고리즘 대체 전까지 임시 경량 구현입니다.
+    """
+
+    def load_image_rgb(self, path: str) -> np.ndarray:
+        return _load_image_rgb(path)
+
+    def analyze_detections(
+        self,
+        image_path: str,
+        detections: List[Dict[str, Any]],
+        verbose: bool = True,
+    ) -> List[Dict[str, Any]]:
         if not detections:
-            if verbose:
-                print("⚠️ 분석할 감지 결과가 없습니다.")
             return []
-        
-        try:
-            # 이미지 로드 (색상 분석용)
-            image = cv2.imread(image_path)
-            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            
-            if verbose:
-                print("🎨 각 영역별 색상 분석 중...")
-            
-            analyzed_results = []
-            
-            for i, detection in enumerate(detections):
-                bbox = detection['bbox']
-                confidence = detection['confidence']
-                class_id = detection['class_id']
-                class_name = detection.get('class_name', f'Class_{class_id}')
-                
-                if verbose:
-                    print(f"\n📊 영역 {i+1} 분석:")
-                    print(f"  클래스: {class_name} (ID: {class_id})")
-                    print(f"  신뢰도: {confidence:.3f}")
-                    print(f"  바운딩 박스: {bbox}")
-                
-                # 색상 분석 (DBSCAN 기반만 사용)
-                color_analysis = analyze_region_with_clustering(
-                    image_rgb, bbox, verbose=verbose
-                )
-                
-                if "error" not in color_analysis:
-                    result = {
-                        'region_id': i,
-                        'class_id': class_id,
-                        'class_name': class_name,
-                        'confidence': confidence,
-                        'bbox': bbox,
-                        'score': color_analysis['saturation_score'],
-                        'saturation_score': color_analysis['saturation_score'],
-                        # 선택된 대표 채도(밝은 클러스터 또는 p90 폴백)
-                        'max_saturation': color_analysis.get('selected_cluster_saturation'),
-                        'selected_saturation': color_analysis.get('selected_cluster_saturation', color_analysis.get('largest_cluster_saturation')),
-                        'selection_method': color_analysis.get('selection_method', 'largest_cluster'),
-                        'n_clusters': color_analysis['n_clusters'],
-                        'n_noise': color_analysis['n_noise'],
-                        'labels': color_analysis['labels'],
-                        'region_shape': color_analysis['region_shape']
-                    }
-                    analyzed_results.append(result)
-                else:
-                    if verbose:
-                        print(f"  ⚠️ {color_analysis['error']}")
-            
-            return analyzed_results
-            
-        except Exception as e:
-            if verbose:
-                print(f"❌ 색상 분석 중 오류 발생: {e}")
-            return []
-    
-    def load_image_rgb(self, image_path: str) -> np.ndarray:
-        """
-        이미지를 RGB 형식으로 로드
-        
-        Args:
-            image_path: 이미지 파일 경로
-            
-        Returns:
-            RGB 이미지 배열
-        """
-        image = cv2.imread(image_path)
-        return cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+        rgb = _load_image_rgb(image_path)
+        h, w, _ = rgb.shape
+        results: List[Dict[str, Any]] = []
+        for i, det in enumerate(detections):
+            # bbox = [x1,y1,x2,y2] 가정, 경계 보정
+            bbox = det.get("bbox") or [0, 0, w, h]
+            x1, y1, x2, y2 = [int(max(0, v)) for v in bbox]
+            x1 = min(x1, w - 1)
+            x2 = min(max(x2, x1 + 1), w)
+            y1 = min(y1, h - 1)
+            y2 = min(max(y2, y1 + 1), h)
+
+            crop = rgb[y1:y2, x1:x2]
+            s = _saturation_from_rgb(crop)
+
+            enriched = dict(det)
+            enriched["region_id"] = i
+            enriched["score"] = float(round(s, 4))
+            results.append(enriched)
+
+        return results
+
+

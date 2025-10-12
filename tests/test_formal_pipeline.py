@@ -49,7 +49,7 @@ def test_formal_pipeline_visual():
 
     # 3) Optional: run a detection to list labels
     detector = ObjectDetector()
-    detections_preview = detector.detect_objects(image_path, conf_threshold=0.8, verbose=False)
+    detections_preview = detector.detect_objects(image_path, conf_threshold=0.4, verbose=False)
     class_names = [d.get("class_name", f"Class_{d.get('class_id')}") for d in detections_preview]
     counts = Counter(class_names)
     print("\nDetected labels (conf>=0.8):", len(detections_preview))

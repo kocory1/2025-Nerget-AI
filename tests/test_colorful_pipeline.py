@@ -47,7 +47,7 @@ def test_yolo_color_modular():
     print(f"Selected test image: {image_path}")
     
     # 3. 감지 1회 수행 후 Colorful 분석 실행
-    detections = detector.detect_objects(image_path, conf_threshold=0.8, verbose=True)
+    detections = detector.detect_objects(image_path, conf_threshold=0.4, verbose=True)
     result = pipeline.detect_and_analyze(
         image_path,
         conf_threshold=0.8,

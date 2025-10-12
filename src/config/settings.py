@@ -27,7 +27,7 @@ IMAGE_PROCESSING_CONFIG = {
 
 # 객체 감지 설정
 DETECTION_CONFIG = {
-    "confidence_threshold": 0.8,  # 신뢰도 임계값
+    "confidence_threshold": 0.4,  # 신뢰도 임계값 (통일)
     "model_type": "yolos",       # 사용할 모델 (yolo/yolos)
     "device": "auto"             # 디바이스 (auto/cpu/cuda)
 }
@@ -50,8 +50,14 @@ API_CONFIG = {
     "max_file_size": 10 * 1024 * 1024  # 최대 파일 크기 (10MB)
 }
 
-# Database 설정 (환경변수 우선)
+# GenAI 설정 (환경변수 우선: 키는 코드에 하드코딩하지 않음)
 import os
+GENAI_CONFIG = {
+    "api_key": os.getenv("GOOGLE_API_KEY", "AIzaSyDPe-R1RqS53mc2N_wCZLt1i8V7vtt3wHc"),
+    "model": os.getenv("GENAI_MODEL", "gemini-2.5-flash-image-preview"),
+}
+
+# Database 설정 (환경변수 우선)
 
 DATABASE_CONFIG = {
     "host": os.getenv("DB_HOST", "127.0.0.1"),
