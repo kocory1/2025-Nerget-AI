@@ -29,9 +29,9 @@ def health():
 
 
 @router.post("/reload")
-def reload_index():
+async def reload_index():
     store = FaissIndexStore()
-    summary = store.reload_from_runs()
+    summary = await store.rebuild_from_db_with_fallback()
     return {"reloaded": True, **summary}
 
 

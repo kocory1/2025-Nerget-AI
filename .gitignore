@@ -1,37 +1,51 @@
 yolo11n-cls.pt
 yolov8n.pt
 
+# Virtual environments
+.venv/
+venv/
+
+# Environment files
+.env
+.env.*
+
+# OS
+.DS_Store
+
+# Python caches/compiled
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+
+# Datasets and large artifacts
+dataset/**
 datasets/
 ClothingParts_v1i_yolov11/
 
-__pycache__/__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-.venv/
-venv/
-.env
-.DS_Store
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-.venv/
-venv/
-.env
-.DS_Store
-# macOS
-.DS_Store
-
-# datasets
-dataset/**
-!dataset/examples/**
-
-# runs artifacts
+# Training/experiment outputs
 runs/**
-!runs/unified_csv/**/vectors.csv
 
-# caches/compiled
-__pycache__/
-*.pyc
+# Logs and PIDs
+*.log
+server.pid
+
+# Notebooks
+*.ipynb
+
+# Non-runtime sources
+docs/**
+tests/**
+scripts/**
+
+# Local images at repo root (non-runtime)
+generated_image.png
+edited_image.png
+
+# Internal tools (nanobanana) - exclude from deploy/repo
+src/nanobanana/**
+
+# Web crawling utilities - exclude
+src/web_crowling/**
 

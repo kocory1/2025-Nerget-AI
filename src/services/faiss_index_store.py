@@ -3,11 +3,10 @@
 - 역할: 인덱스 빌드/로드/저장/검색
 - 엔진: IndexFlatIP (L2 정규화 → 코사인 유사도와 동일)
 
-초심자용 요약
-- CSV에서 벡터(v1,v2,v3,(v4=옵션))를 읽어 모읍니다.
-- 벡터는 길이를 1로 맞추는(L2 정규화) 과정을 거칩니다.
-- FAISS(IndexFlatIP)에 적재하면 빠르게 비슷한 벡터를 찾을 수 있습니다.
-- 검색은 3D만 사용합니다. v4는 추천 다양성 제어(재랭킹)에서만 사용합니다.
+요약
+- RDS MySQL(IMAGE_VECTORS)에서 v1..v4를 읽어 인덱스 빌드(RDS 우선)
+- 실패/0건 시 파일 폴백: src/faiss/{index_ip.faiss,idmap.json}
+- 검색은 3D만 사용, v4는 다양성(MMR) 재랭킹에만 사용
 """
 
 from __future__ import annotations
@@ -17,9 +16,24 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+import os
 
 import numpy as np
 import faiss  # type: ignore
+import aiomysql  # type: ignore
+
+try:
+    # 상대 임포트: services -> config
+    from ..config.settings import DATABASE_CONFIG
+except Exception:
+    # 테스트/독립 실행 시 폴백(환경변수 직접 사용)
+    DATABASE_CONFIG = {
+        "host": os.getenv("DB_HOST", "127.0.0.1"),
+        "port": int(os.getenv("DB_PORT", "3306")),
+        "user": os.getenv("DB_USER", "root"),
+        "password": os.getenv("DB_PASSWORD", ""),
+        "database": os.getenv("DB_NAME", "nerget_ai"),
+    }
 
 
 @dataclass
@@ -52,7 +66,6 @@ def _l2_normalize(mat: np.ndarray) -> np.ndarray:
 class FaissIndexStore:
     """
     인덱스 스토어(단일 책임: 빌드/저장/로드/검색)
-    - build_from_csvs(csv_paths): CSV들로부터 인덱스를 만듭니다.
     - save()/load(): 디스크에 저장/로딩합니다.
     - search_by_vector(): 3D 질의로 최근접 이웃을 찾습니다.
     """
@@ -62,90 +75,13 @@ class FaissIndexStore:
         self.dim: Optional[int] = None
         self.id_to_meta: Dict[int, VectorMeta] = {}
         self.id_to_vector: Dict[int, np.ndarray] = {}
-        self.index_path: Path = Path("runs/faiss/index_ip.faiss")
-        self.meta_path: Path = Path("runs/faiss/idmap.json")
+        # 고정 경로: src/faiss (환경변수 오버라이드 제거)
+        faiss_dir = Path("src/faiss")
+        self.index_path: Path = faiss_dir / "index_ip.faiss"
+        self.meta_path: Path = faiss_dir / "idmap.json"
         self.index_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # -------- 파일 탐색 --------
-    def find_csvs_under(self, base_dir: Path) -> List[Path]:
-        out: List[Path] = []
-        if not base_dir.exists():
-            return out
-        for p in base_dir.rglob("vectors.csv"):
-            out.append(p)
-        return sorted(out)
-
-    # -------- 빌드 --------
-    def build_from_csvs(self, csv_paths: List[Path]) -> None:
-        rows: List[Tuple[int, VectorMeta, np.ndarray]] = []
-
-        for path in csv_paths:
-            if not path.exists():
-                continue
-            with path.open("r", encoding="utf-8") as f:
-                header = f.readline()
-                for line in f:
-                    parts = [s.strip() for s in line.strip().split(",")]
-                    if len(parts) < 10:
-                        continue
-                    s_id, local_path = parts[0], parts[1]
-                    try:
-                        v1 = float(parts[2])
-                        v2 = float(parts[3])
-                        v3 = float(parts[4])
-                        vec = [v1, v2, v3]
-                        # v4는 인덱스 차원 정합을 위해 0.0으로 패드할 수 있음
-                        if len(parts) >= 6:
-                            try:
-                                v4 = float(parts[5])
-                                vec.append(v4)
-                            except Exception:
-                                pass
-                    except Exception:
-                        continue
-                    version, status, created_at, updated_at = parts[6], parts[7], parts[8], parts[9]
-                    int_id = _uuid_to_int64(s_id)
-                    meta = VectorMeta(
-                        string_id=s_id,
-                        local_path=local_path,
-                        version=version,
-                        status=status,
-                        created_at=created_at,
-                        updated_at=updated_at,
-                        int_id=int_id,
-                    )
-                    rows.append((int_id, meta, np.asarray(vec, dtype=np.float32)))
-
-        if not rows:
-            self.index = None
-            self.dim = None
-            self.id_to_meta.clear()
-            self.id_to_vector.clear()
-            return
-
-        # 벡터 차원 맞추기(최대 차원으로 0 패딩)
-        max_dim = max(v.shape[0] for _, _, v in rows)
-        ids: List[int] = []
-        vecs: List[np.ndarray] = []
-        self.id_to_meta.clear()
-        self.id_to_vector.clear()
-        for int_id, meta, vec in rows:
-            if vec.shape[0] < max_dim:
-                vec = np.pad(vec, (0, max_dim - vec.shape[0]))
-            ids.append(int_id)
-            vecs.append(vec.astype(np.float32))
-            self.id_to_meta[int_id] = meta
-            self.id_to_vector[int_id] = vec.astype(np.float32)
-
-        mat = np.stack(vecs).astype(np.float32)
-        mat = _l2_normalize(mat)
-
-        d = mat.shape[1]
-        self.dim = d
-        base = faiss.IndexFlatIP(d)
-        idmap = faiss.IndexIDMap2(base)
-        idmap.add_with_ids(mat, np.asarray(ids, dtype=np.int64))
-        self.index = idmap
+    # CSV 기반 경로 제거됨 (RDS 우선 + 파일 폴백만 유지)
 
     # -------- 저장/로딩 --------
     def save(self) -> None:
@@ -220,11 +156,129 @@ class FaissIndexStore:
         return result
 
     # -------- 유틸 --------
-    def reload_from_runs(self) -> Dict:
-        """runs/unified_csv/**/vectors.csv를 스캔해 인덱스를 재구성합니다."""
-        csvs = self.find_csvs_under(Path("runs/unified_csv"))
-        self.build_from_csvs(csvs)
-        self.save()
-        return {"csv_files": [str(p) for p in csvs], "count": len(self.id_to_meta)}
+    # CSV 리로드 유틸 제거됨
 
+
+
+    # -------- RDS(MySQL)에서 빌드 --------
+    async def build_from_mysql(self, status: str = "DONE") -> Dict:
+        """
+        RDS MySQL의 IMAGE_VECTORS에서 벡터(id, s3Key, v1..v4 등)를 읽어 인덱스를 구성합니다.
+        - meta.local_path에는 s3Key를 저장합니다.
+        - 벡터는 L2 정규화하여 IndexFlatIP로 색인합니다.
+        반환: {"count": N, "dim": d}
+        """
+        rows: List[Tuple[int, VectorMeta, np.ndarray]] = []
+
+        conn: Optional[aiomysql.Connection] = None
+        cur: Optional[aiomysql.Cursor] = None
+        try:
+            conn = await aiomysql.connect(
+                host=DATABASE_CONFIG["host"],
+                port=int(DATABASE_CONFIG["port"]),
+                user=DATABASE_CONFIG["user"],
+                password=DATABASE_CONFIG["password"],
+                db=DATABASE_CONFIG["database"],
+                autocommit=True,
+                charset="utf8mb4",
+            )
+            cur = await conn.cursor()
+            await cur.execute(
+                """
+                SELECT id, s3Key, v1, v2, v3, v4, status, createdAt, updatedAt
+                FROM IMAGE_VECTORS
+                WHERE status=%s
+                """,
+                (status,),
+            )
+            async for s_id, s3key, v1, v2, v3, v4, st, created_at, updated_at in cur:
+                try:
+                    vec: List[float] = [float(v1), float(v2), float(v3)]
+                    if v4 is not None:
+                        try:
+                            vec.append(float(v4))
+                        except Exception:
+                            pass
+                except Exception:
+                    continue
+
+                int_id = _uuid_to_int64(str(s_id))
+                meta = VectorMeta(
+                    string_id=str(s_id),
+                    local_path=str(s3key or ""),  # s3Key 저장
+                    version="",  # 버전 컬럼이 없으므로 빈값
+                    status=str(st or ""),
+                    created_at=str(created_at or ""),
+                    updated_at=str(updated_at or ""),
+                    int_id=int_id,
+                )
+                rows.append((int_id, meta, np.asarray(vec, dtype=np.float32)))
+        finally:
+            try:
+                if cur is not None:
+                    await cur.close()
+            except Exception:
+                pass
+            try:
+                if conn is not None:
+                    conn.close()
+            except Exception:
+                pass
+
+        # 로우가 없으면 비우고 종료
+        if not rows:
+            self.index = None
+            self.dim = None
+            self.id_to_meta.clear()
+            self.id_to_vector.clear()
+            return {"count": 0, "dim": 0}
+
+        # 벡터 차원 맞추기(최대 차원으로 0 패딩)
+        max_dim = max(v.shape[0] for _, _, v in rows)
+        ids: List[int] = []
+        vecs: List[np.ndarray] = []
+        self.id_to_meta.clear()
+        self.id_to_vector.clear()
+        for int_id, meta, vec in rows:
+            if vec.shape[0] < max_dim:
+                vec = np.pad(vec, (0, max_dim - vec.shape[0]))
+            ids.append(int_id)
+            arr = vec.astype(np.float32)
+            vecs.append(arr)
+            self.id_to_meta[int_id] = meta
+            self.id_to_vector[int_id] = arr
+
+        mat = np.stack(vecs).astype(np.float32)
+        mat = _l2_normalize(mat)
+
+        d = mat.shape[1]
+        self.dim = d
+        base = faiss.IndexFlatIP(d)
+        idmap = faiss.IndexIDMap2(base)
+        idmap.add_with_ids(mat, np.asarray(ids, dtype=np.int64))
+        self.index = idmap
+
+        return {"count": len(self.id_to_meta), "dim": int(self.dim or 0)}
+
+
+    async def rebuild_from_db_with_fallback(self) -> Dict:
+        """
+        1) 우선 DB에서 빌드 시도 후 저장
+        2) 실패/0건이면 디스크에서 로드하여 폴백
+        반환: {"source": "db"|"file", "count": N, "dim": d, ...}
+        """
+        try:
+            summary = await self.build_from_mysql(status="DONE")
+            if int(summary.get("count", 0)) > 0:
+                self.save()
+                return {"source": "db", **summary}
+        except Exception:
+            pass
+
+        self.load()
+        return {
+            "source": "file",
+            "count": len(self.id_to_meta),
+            "dim": int(self.dim or 0),
+        }
 
