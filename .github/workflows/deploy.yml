@@ -56,6 +56,8 @@ jobs:
             test -f "${{ secrets.EC2_PATH }}/.venv/bin/activate"
             source "${{ secrets.EC2_PATH }}/.venv/bin/activate"
             pip install --upgrade pip
+            # Install CPU-only PyTorch first to avoid nvidia CUDA packages
+            pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.3.1+cpu
             pip install --no-cache-dir -r requirements.txt
             set -a; . ./.env; set +a
             pkill -f "uvicorn src.api.main:app" || true
