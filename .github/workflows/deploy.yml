@@ -83,7 +83,7 @@ jobs:
             pgrep -f "uvicorn src.api.main:app" >/dev/null 2>&1 && pkill -TERM -f "uvicorn src.api.main:app" || true
             set -e
             # PYTHONPATH 보강 후 절대경로로 기동
-            env PYTHONPATH="$PWD:$PWD/src" nohup "${{ secrets.EC2_PATH }}"/.venv/bin/uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --workers 2 > app.log 2>&1 &
+            env PYTHONPATH="$PWD:$PWD/src" nohup "${{ secrets.EC2_PATH }}"/.venv/bin/python -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --workers 1 > app.log 2>&1 &
             echo "Waiting for health..."
             for i in $(seq 1 30); do
               if curl -sf http://127.0.0.1:8000/health >/dev/null; then
@@ -93,5 +93,7 @@ jobs:
             echo "Health check failed. Showing last logs:" >&2
             tail -n 200 app.log || true
             exit 1
-
+      - name: External health (public)
+        run: 
+          curl -sf --connect-timeout 10 http://${{ secrets.EC2_HOST }}:8000/health
 
