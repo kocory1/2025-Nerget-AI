@@ -33,21 +33,17 @@ jobs:
           overwrite: true
           rm: true
 
-      - name: Install deps and restart app on EC2
-        continue-on-error: true
+      - name: Install dependencies on EC2
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          script_stop: false
           timeout: 10m
           command_timeout: 10m
           script: |
-            trap 'echo "SIGTERM ignored"; exit 0' TERM
             set -e
             cd ${{ secrets.EC2_PATH }}
-            chmod 600 .env || true
             export DEBIAN_FRONTEND=noninteractive
             if command -v apt-get >/dev/null 2>&1; then
               sudo apt-get update -y
@@ -58,17 +54,37 @@ jobs:
             fi
             rm -rf "${{ secrets.EC2_PATH }}/.venv"
             python3 -m venv "${{ secrets.EC2_PATH }}/.venv"
-            test -f "${{ secrets.EC2_PATH }}/.venv/bin/activate"
-            source "${{ secrets.EC2_PATH }}/.venv/bin/activate"
-            pip install --upgrade pip
-            # Install CPU-only PyTorch first to avoid nvidia CUDA packages
-            pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.3.1+cpu
-            pip install --no-cache-dir -r requirements.txt
+            "${{ secrets.EC2_PATH }}"/.venv/bin/python -m pip install --upgrade pip
+            "${{ secrets.EC2_PATH }}"/.venv/bin/pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.3.1+cpu
+            "${{ secrets.EC2_PATH }}"/.venv/bin/pip install --no-cache-dir -r requirements.txt
+            echo "Dependencies installed."
+
+      - name: Restart app on EC2
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          timeout: 10m
+          command_timeout: 10m
+          script: |
+            set -e
+            cd ${{ secrets.EC2_PATH }}
+            chmod 600 .env || true
             set -a; . ./.env; set +a
             set +e
             pgrep -f "uvicorn src.api.main:app" >/dev/null 2>&1 && pkill -TERM -f "uvicorn src.api.main:app" || true
             set -e
-            nohup "${{ secrets.EC2_PATH }}"/.venv/bin/uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --workers 2 > app.log 2>&1 &
-            echo "Deployed. Check /health on EC2."
+            # PYTHONPATH 보강 후 절대경로로 기동
+            env PYTHONPATH="$PWD:$PWD/src" nohup "${{ secrets.EC2_PATH }}"/.venv/bin/uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --workers 2 > app.log 2>&1 &
+            echo "Waiting for health..."
+            for i in $(seq 1 30); do
+              if curl -sf http://127.0.0.1:8000/health >/dev/null; then
+                echo "Health OK"; exit 0; fi
+              sleep 1
+            done
+            echo "Health check failed. Showing last logs:" >&2
+            tail -n 200 app.log || true
+            exit 1
 
 
