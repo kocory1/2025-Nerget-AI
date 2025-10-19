@@ -55,7 +55,7 @@ jobs:
             chmod 600 .env || true
             command -v python3 >/dev/null || sudo yum -y install python3-pip || sudo apt-get update && sudo apt-get install -y python3-pip
             python3 -m venv .venv || true
-            source .venv/bin/activate
+            source ${{ secrets.EC2_PATH }}/.venv/bin/activate
             pip install --upgrade pip
             pip install -r requirements.txt
             set -a; . ./.env; set +a
