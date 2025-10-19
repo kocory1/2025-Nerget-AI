@@ -99,7 +99,7 @@ jobs:
             exit 1
 
       - name: External health (public)
-        run: 
+        run:  |
           for i in $(seq 1 10); do
             if curl -sf --connect-timeout 5 "http://${{ secrets.EC2_HOST }}:8000/health"; then
               echo "Public health OK"; exit 0
