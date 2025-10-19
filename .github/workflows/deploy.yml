@@ -80,6 +80,10 @@ jobs:
             chmod 600 .env || true
             set -a; . ./.env; set +a
             set +e
+            # 포트 8000 점유 프로세스가 있으면 우선 종료(포트 기준)
+            sudo fuser -k 8000/tcp >/dev/null 2>&1 || true
+            PID=$(sudo lsof -t -i:8000 -sTCP:LISTEN 2>/dev/null || true); [ -n "$PID" ] && sudo kill -TERM $PID || true
+            # 프로세스명 기준 종료(보조)
             pgrep -f "uvicorn src.api.main:app" >/dev/null 2>&1 && pkill -TERM -f "uvicorn src.api.main:app" || true
             set -e
             # PYTHONPATH 보강 후 절대경로로 기동
