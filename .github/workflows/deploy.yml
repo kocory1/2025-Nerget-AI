@@ -56,7 +56,7 @@ jobs:
             test -f "${{ secrets.EC2_PATH }}/.venv/bin/activate"
             source "${{ secrets.EC2_PATH }}/.venv/bin/activate"
             pip install --upgrade pip
-            pip install -r requirements.txt
+            pip install --no-cache-dir -r requirements.txt
             set -a; . ./.env; set +a
             pkill -f "uvicorn src.api.main:app" || true
             nohup uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --workers 2 > app.log 2>&1 &
