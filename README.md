@@ -115,7 +115,7 @@ uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
 ### 4️⃣ 추천 API(FAISS) 빠른 사용법
 
 ```bash
-# 1) 서버 실행 후 인덱스 로드/재구축 (runs/unified_csv/**/vectors.csv 스캔)
+# 1) 서버 실행 후 인덱스 로드/재구축 (RDS MySQL에서 v1..v4 읽기, 실패 시 파일 폴백)
 curl -X POST http://localhost:8000/reco/reload
 
 # 2) 헬스 체크(인덱스 로딩 여부 및 벡터 수)
@@ -128,19 +128,19 @@ curl -X POST http://localhost:8000/reco/by-user-vector \
 ```
 
 - 인덱스 엔진: FAISS IndexFlatIP (L2 정규화된 내적 = 코사인 유사도)
-- 인덱스 파일: `runs/faiss/index_ip.faiss`(벡터), `runs/faiss/idmap.json`(메타데이터)
+- 인덱스 파일: `src/faiss/index_ip.faiss`(벡터), `src/faiss/idmap.json`(메타데이터)
 - v4(다양성) → λ, 후보군 크기(C) 매핑:
   - λ = 0.6 − 0.3·v4, 이후 [0.3, 0.9]로 클램핑
   - C = ceil(k · (1 + 0.4·v4)), 이후 [ceil(0.6k), ceil(1.4k)]로 클램핑
 - 초기 후보는 FAISS로 검색하고, 최종 결과는 MMR로 재랭킹합니다.
-- 새로운 CSV가 추가되면 `POST /reco/reload`를 다시 호출해 인덱스를 갱신합니다.
+- `POST /reco/reload`는 RDS에서 최신 벡터를 읽어 인덱스를 갱신하며, 0건/오류 시 디스크의 인덱스/메타로 폴백합니다.
 
 ## 🌐 API 설명
 
 - GET `/health`: 서버 상태 확인
 - POST `/images/analyze`: 단일 이미지 통합 분석 실행
 - GET `/reco/health`: 추천 인덱스 로딩 여부/카운트
-- POST `/reco/reload`: `runs/unified_csv/**/vectors.csv`로 인덱스 재구축/재로드
+- POST `/reco/reload`: RDS MySQL에서 인덱스 재구축(오류/0건 시 파일 폴백)
 - POST `/reco/by-user-vector`: 사용자 벡터 기반 추천
   - 요청: `{ "vector": [v1, v2, v3, v4], "k": 30 }`
   - 응답: `items[]`에 `id, localPath, v1..v4, score_ip, score_mmr, rank`
@@ -170,6 +170,11 @@ curl -X POST http://localhost:8000/reco/by-user-vector \
 ---
 
 ## 🆕 버전 히스토리
+### 0.9
+- 리로드 동작을 RDS 우선(실패 시 파일 폴백)으로 변경
+- 인덱스 기본 경로를 `src/faiss`로 변경(퍼시스턴스 포함)
+- CI/CD 추가: `.github/workflows/deploy.yml`
+
 ### 0.8
 - 추천 API 추가: `/reco/health`, `/reco/reload`, `/reco/by-user-vector`
 - FAISS 통합: IndexFlatIP + L2 정규화, `index_ip.faiss`/`idmap.json` 퍼시스턴스

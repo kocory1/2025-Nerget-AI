@@ -1,0 +1,66 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create .env from Secrets
+        run: |
+          cat > .env << 'EOF'
+          DB_HOST=${{ secrets.DB_HOST }}
+          DB_PORT=${{ secrets.DB_PORT }}
+          DB_USER=${{ secrets.DB_USER }}
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          DB_NAME=${{ secrets.DB_NAME }}
+          EOF
+
+      - name: Copy source to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: ".env,."
+          target: "${{ secrets.EC2_PATH }}"
+          strip_components: 0
+          overwrite: true
+          rm: true
+          exclude: |
+            **/.git/**
+            **/.github/workflows/**
+            **/venv/**
+            **/.venv/**
+            **/dataset/**
+            **/docs/**
+            **/tests/**
+            **/scripts/**
+            **/runs/**
+
+      - name: Install deps and restart app on EC2
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+            cd ${{ secrets.EC2_PATH }}
+            chmod 600 .env || true
+            command -v python3 >/dev/null || sudo yum -y install python3-pip || sudo apt-get update && sudo apt-get install -y python3-pip
+            python3 -m venv .venv || true
+            source .venv/bin/activate
+            pip install --upgrade pip
+            pip install -r requirements.txt
+            set -a; . ./.env; set +a
+            pkill -f "uvicorn src.api.main:app" || true
+            nohup uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --workers 2 > app.log 2>&1 &
+            echo "Deployed. Check /health on EC2."
+
+
