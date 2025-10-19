@@ -102,8 +102,7 @@ jobs:
         run:  |
           for i in $(seq 1 10); do
             if curl -sf --connect-timeout 5 "http://${{ secrets.EC2_HOST }}:8000/health"; then
-              echo "Public health OK"; exit 0
-            fi
+              echo "Public health OK"; exit 0; fi
             sleep 3
           done
           echo "Public health timeout"; exit 1
