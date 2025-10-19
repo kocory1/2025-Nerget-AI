@@ -68,7 +68,7 @@ jobs:
             set +e
             pgrep -f "uvicorn src.api.main:app" >/dev/null 2>&1 && pkill -TERM -f "uvicorn src.api.main:app" || true
             set -e
-            nohup uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --workers 2 > app.log 2>&1 &
+            nohup "${{ secrets.EC2_PATH }}"/.venv/bin/uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --workers 2 > app.log 2>&1 &
             echo "Deployed. Check /health on EC2."
 
 
