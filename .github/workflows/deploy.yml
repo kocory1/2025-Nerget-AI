@@ -100,10 +100,31 @@ jobs:
 
       - name: External health (public)
         run:  |
-          for i in $(seq 1 10); do
+          for i in $(seq 1 20); do
             if curl -sf --connect-timeout 5 "http://${{ secrets.EC2_HOST }}:8000/health"; then
               echo "Public health OK"; exit 0; fi
             sleep 3
           done
           echo "Public health timeout"; exit 1
+
+      - name: Diagnostics on failure (ssh)
+        if: failure()
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          timeout: 5m
+          command_timeout: 5m
+          script: |
+            set -e
+            cd ${{ secrets.EC2_PATH }}
+            echo "== PID(s) =="
+            pgrep -af "uvicorn src.api.main:app" || true
+            echo "== LISTEN 8000 =="
+            ss -ltnp | grep ':8000' || sudo lsof -iTCP:8000 -sTCP:LISTEN || true
+            echo "== Internal health =="
+            curl -sS http://127.0.0.1:8000/health || true
+            echo "== Tail app.log =="
+            tail -n 200 app.log || true
 
